@@ -115,13 +115,17 @@
   const fmt = (h, m) => `${h}時${String(m).padStart(2, '0')}分`;
 
   function twoChoices(question, correct, wrong, extra = {}) {
-    const correctIndex = coin() ? 0 : 1;
+    const correctText = String(correct);
+    const wrongText = String(wrong);
+    const isLabeledAB = new Set([correctText, wrongText]).size === 2
+      && [correctText, wrongText].every(value => value === 'A' || value === 'B');
+    const correctIndex = isLabeledAB ? (correctText === 'A' ? 0 : 1) : (coin() ? 0 : 1);
     return {
       id: question.id || `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       interaction: 'route',
       choiceCount: 2,
       question: question.question || question.text || '',
-      choices: correctIndex === 0 ? [String(correct), String(wrong)] : [String(wrong), String(correct)],
+      choices: isLabeledAB ? ['A', 'B'] : (correctIndex === 0 ? [correctText, wrongText] : [wrongText, correctText]),
       correctIndex,
       explanation: question.explanation || `せいかいは「${correct}」だよ。`,
       ...extra

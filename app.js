@@ -3,6 +3,7 @@
   'use strict';
   const $ = (id) => document.getElementById(id);
   const MAX_QUESTIONS = 10;
+  const AUTO_ADVANCE_MS = 2400;
   const TOPICS = {
     math: [
       ['mix', 'なんでも ミックス'],
@@ -47,6 +48,7 @@
   };
   let swipeStart = null;
   let audioContext = null;
+  let advanceTimer = null;
 
   function saveLocal(key, value) {
     try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) { /* file:// やプライベート閲覧では保存できないことがあります */ }
@@ -74,10 +76,11 @@
 
   function resetGame() {
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    clearAdvanceTimer();
     const {subject, topic, grade, sound} = state;
     state = {subject, topic, grade, sound, number:1, question:null, coins:0, streak:0, correct:0, wrong:0, locked:false, mistakes:[], recent:[]};
     el.finish.hidden = true;
-    el.car.classList.remove('steer-left', 'steer-right');
+    resetDriveAnimation();
     el.feedback.hidden = true;
     el.effects.replaceChildren();
     nextQuestion();
@@ -85,10 +88,12 @@
 
   function nextQuestion() {
     if (state.number > MAX_QUESTIONS) { showFinish(); return; }
+    clearAdvanceTimer();
     state.locked = false;
     el.feedback.hidden = true;
     el.feedback.classList.remove('is-error');
-    el.car.classList.remove('steer-left', 'steer-right');
+    resetDriveAnimation();
+    el.effects.replaceChildren();
     for (const btn of [...el.choices, ...el.drives]) {
       btn.disabled = false;
       btn.classList.remove('is-correct', 'is-wrong');
@@ -141,8 +146,7 @@
       playFeedbackSound(false);
     }
 
-    el.car.classList.toggle('steer-left', which === 0);
-    el.car.classList.toggle('steer-right', which === 1);
+    startDriveAnimation(which, right);
     el.choices[q.correctIndex].classList.add('is-correct');
     if (!right) el.choices[which].classList.add('is-wrong');
     el.choices[q.correctIndex].querySelector('.answer-state').textContent = '✅';
@@ -154,17 +158,61 @@
     el.fIcon.textContent = right ? (state.streak % 3 === 0 ? '🌟' : '🎉') : '💡';
     el.fTitle.textContent = right ? (state.streak >= 3 ? `${state.streak}れんぞく せいかい！` : 'せいかい！ いいね！') : 'おっと！ ちょっと よりみち';
     el.fText.textContent = q.explanation;
-    el.next.textContent = state.number >= MAX_QUESTIONS ? 'ゴールへ！ 🏁' : 'つぎの もんだい →';
+    el.next.textContent = 'すぐ つぎへ →';
     el.progress.style.width = `${state.number / MAX_QUESTIONS * 100}%`;
     el.coins.textContent = state.coins;
     el.streak.textContent = state.streak;
     el.next.focus({preventScroll:true});
+    scheduleAdvance();
   }
 
   function advance() {
     if (!state.locked) return;
+    clearAdvanceTimer();
     state.number += 1;
     nextQuestion();
+  }
+
+  function clearAdvanceTimer() {
+    if (advanceTimer !== null) {
+      window.clearTimeout(advanceTimer);
+      advanceTimer = null;
+    }
+  }
+
+  function scheduleAdvance() {
+    clearAdvanceTimer();
+    const deadline = performance.now() + AUTO_ADVANCE_MS;
+    const tick = () => {
+      if (!state.locked) return;
+      const remaining = Math.max(0, deadline - performance.now());
+      const seconds = Math.max(1, Math.ceil(remaining / 1000));
+      el.next.textContent = state.number >= MAX_QUESTIONS
+        ? `ゴールへ ${seconds}秒 🏁`
+        : `つぎへ ${seconds}秒 →`;
+      if (remaining <= 0) {
+        advanceTimer = null;
+        advance();
+        return;
+      }
+      advanceTimer = window.setTimeout(tick, 100);
+    };
+    tick();
+  }
+
+  function resetDriveAnimation() {
+    el.world.classList.remove('is-driving', 'is-turning-left', 'is-turning-right', 'is-correct-route', 'is-wrong-route');
+    el.car.classList.remove('steer-left', 'steer-right', 'is-driving', 'is-missed');
+  }
+
+  function startDriveAnimation(which, right) {
+    const side = which === 0 ? 'left' : 'right';
+    el.world.classList.add('is-driving', `is-turning-${side}`, right ? 'is-correct-route' : 'is-wrong-route');
+    el.car.classList.add('is-driving');
+    el.car.classList.toggle('steer-left', which === 0);
+    el.car.classList.toggle('steer-right', which === 1);
+    el.car.classList.toggle('is-missed', !right);
+    spawnDriveEffects(which, right);
   }
 
   function showFinish() {
@@ -288,14 +336,33 @@
   }
 
   function spawnStars() {
-    el.effects.replaceChildren();
+    const wrap = makeNode('div', 'reward-stars');
     for (let i=0; i<7; i++) {
       const star = makeNode('span', 'effect-star', i%3===0?'🪙':'✨');
       star.style.setProperty('--dx', `${(i-3)*45}px`);
       star.style.setProperty('--dy', `${-65-Math.abs(i-3)*18}px`);
-      el.effects.append(star);
+      wrap.append(star);
     }
-    window.setTimeout(()=>el.effects.replaceChildren(), 1000);
+    el.effects.append(wrap);
+    window.setTimeout(()=>wrap.remove(), 1000);
+  }
+
+  function spawnDriveEffects(which, right) {
+    const burst = makeNode('div', `drive-burst ${right ? 'is-success' : 'is-miss'}`);
+    burst.style.left = which === 0 ? '29%' : '71%';
+    burst.style.top = '44%';
+    burst.append(makeNode('span', 'drive-ring'));
+    for (let i=0; i<12; i++) {
+      const particle = makeNode('span', 'drive-particle');
+      const angle = (Math.PI * 2 * i) / 12;
+      const distance = 42 + (i % 3) * 18;
+      particle.style.setProperty('--dx', `${Math.cos(angle) * distance}px`);
+      particle.style.setProperty('--dy', `${Math.sin(angle) * distance}px`);
+      particle.style.setProperty('--delay', `${(i % 4) * 35}ms`);
+      burst.append(particle);
+    }
+    el.effects.append(burst);
+    window.setTimeout(()=>burst.remove(), 1250);
   }
 
   function speakEnglish() {

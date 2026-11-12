@@ -1,4 +1,4 @@
-const CACHE = 'manabi-drive-v2';
+const CACHE = 'manabi-drive-v3';
 const RESOURCES = [
   './', './index.html', './style.css', './questions.js', './app.js',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'

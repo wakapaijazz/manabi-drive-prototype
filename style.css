@@ -102,7 +102,8 @@ button:disabled { cursor: default; }
 .clock-unit { display: flex; flex-direction: column; align-items: center; gap: 1px; color: #3c71b3; font-weight: 900; }
 .clockpair .clockface { width: 92px; height: 92px; }
 .world { height: 348px; position: relative; background: linear-gradient(#97ddff 0%, #cdf4ff 52%, #a6e594 52.1%, #65c876 100%); border-radius: 20px; overflow: hidden; margin-top: 13px; isolation: isolate; touch-action: pan-y; }
-.world::before { content: ""; position: absolute; inset: 0; z-index: 8; pointer-events: none; opacity: 0; background: radial-gradient(circle at 50% 80%, #ffffffb8 0, #ffffff00 48%); }
+.drive-canvas { position: absolute; inset: 0; z-index: 1; display: block; width: 100%; height: 100%; pointer-events: none; }
+.world::before { content: ""; position: absolute; inset: 0; z-index: 4; pointer-events: none; opacity: 0; background: radial-gradient(circle at 50% 80%, #ffffffb8 0, #ffffff00 48%); }
 .world.is-correct-route::before { animation: success-flash .9s ease-out both; }
 .world.is-wrong-route::before { background: radial-gradient(circle at 50% 80%, #ffd8a866 0, #ffd8a800 52%); animation: wrong-flash .75s ease-out both; }
 .sun { position: absolute; width: 53px; height: 53px; background: #ffe879; box-shadow: 0 0 0 12px #fffa9b42; right: 11%; top: 10%; border-radius: 100%; }
@@ -140,7 +141,7 @@ button:disabled { cursor: default; }
 .bush-a { left: 5%; top: 43%; font-size: 50px; }.bush-b { left: 17%; bottom: 8%; font-size: 25px; }.bush-c { right: 5%; top: 42%; font-size: 53px; }.bush-d { right: 22%; bottom: 8%; font-size: 27px; }
 .answer-pole { position: absolute; z-index: 3; height: 52px; width: 9px; top: 39%; background: #e7ddba; border: 2px solid #a79c7e; border-radius: 2px; }
 .answer-pole-left { left: 25.8%; }.answer-pole-right { right: 25.8%; }
-.road-choice { position: absolute; z-index: 5; top: 8%; width: 37%; min-height: 93px; padding: 9px 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: 4px solid white; background: #ffffffec; box-shadow: 0 8px 0 #285baf, 0 11px 24px #12436640; border-radius: 18px; color: #27548a; transition: transform .18s, background .2s, border-color .2s; }
+.road-choice { position: absolute; z-index: 6; top: 8%; width: 37%; min-height: 93px; padding: 9px 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: 4px solid white; background: #ffffffec; box-shadow: 0 8px 0 #285baf, 0 11px 24px #12436640; border-radius: 18px; color: #27548a; transition: transform .18s, background .2s, border-color .2s; }
 .world.is-driving .road-choice { animation: sign-bounce .5s ease-in-out 2; }
 .world.is-driving .road-choice.is-correct { animation: chosen-sign .8s cubic-bezier(.2,1.2,.3,1) both; }
 .world.is-driving .road-choice.is-wrong { animation: wrong-sign .65s ease-out both; }

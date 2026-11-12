@@ -120,13 +120,16 @@
     const isLabeledAB = new Set([correctText, wrongText]).size === 2
       && [correctText, wrongText].every(value => value === 'A' || value === 'B');
     const correctIndex = isLabeledAB ? (correctText === 'A' ? 0 : 1) : (coin() ? 0 : 1);
+    const choices = isLabeledAB ? ['A', 'B'] : (correctIndex === 0 ? [correctText, wrongText] : [wrongText, correctText]);
+    // 問題データを追加・変更しても、正解が選択肢から消えないようにする。
+    if (!choices.includes(correctText)) choices[correctIndex] = correctText;
     return {
       id: question.id || `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       interaction: 'route',
       choiceCount: 2,
       question: question.question || question.text || '',
-      choices: isLabeledAB ? ['A', 'B'] : (correctIndex === 0 ? [correctText, wrongText] : [wrongText, correctText]),
-      correctIndex,
+      choices,
+      correctIndex: choices.indexOf(correctText),
       explanation: question.explanation || `せいかいは「${correct}」だよ。`,
       ...extra
     };
@@ -175,11 +178,12 @@
       }
     }
 
+    const targetCount = Math.random() < .5 ? 3 : 4;
     const choices = [correctText];
     for (const candidate of [...q.choices, ...pool].sort(() => Math.random() - .5)) {
       const text = String(candidate);
       if (!choices.includes(text)) choices.push(text);
-      if (choices.length >= (Math.random() < .5 ? 3 : 4)) break;
+      if (choices.length >= targetCount) break;
     }
     if (choices.length < 3) return q;
     const shuffled = [...choices].sort(() => Math.random() - .5);

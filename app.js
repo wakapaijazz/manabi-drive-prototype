@@ -4,6 +4,7 @@
   const $ = (id) => document.getElementById(id);
   const MAX_QUESTIONS = 10;
   const AUTO_ADVANCE_MS = 2400;
+  const ANSWER_LIMIT_MS = 10000;
   const TOPICS = {
     math: [
       ['mix', 'なんでも ミックス'],
@@ -34,6 +35,7 @@
     choices: [], roadChoices: $('roadChoices'),
     drives: [$('goLeft'), $('goRight')], controlsRow: document.querySelector('.controls-row'), controlHint: document.querySelector('.control-hint'),
     world: $('world'), canvas: $('driveCanvas'), bossBadge: $('bossBadge'), worldTip: $('worldTip'),
+    answerTimer: $('answerTimer'), answerTime: $('answerTime'), answerTimerFill: $('answerTimerFill'),
     feedback: $('feedback'), fIcon: $('feedbackIcon'), fTitle: $('feedbackTitle'), fText: $('feedbackText'),
     next: $('nextButton'), coins: $('coinCount'), streak: $('streakCount'), counter: $('questionCounter'),
     progress: $('progressFill'), sound: $('soundButton'),
@@ -55,11 +57,12 @@
     engineNoise: null, engineNoiseGain: null, noiseBuffer: null
   };
   let advanceTimer = null;
+  let answerTimer = null;
   const drive = {
     ctx: null, width: 0, height: 0, dpr: 1, lastTime: 0, frame: 0,
     distance: 0, speed: .12, lane: 0, targetLane: 0,
     mode: 'idle', phase: 'cruise', turnSide: 0, turnProgress: 0, shake: 0, flash: 0,
-    choiceCount: 2, isBoss: false, selectedChoice: -1, boost: 0, particles: []
+    choiceCount: 2, isBoss: false, selectedChoice: -1, junctionDepth: .1, boost: 0, particles: []
   };
 
   function saveLocal(key, value) {
@@ -89,6 +92,7 @@
   function resetGame() {
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     clearAdvanceTimer();
+    clearAnswerTimer();
     const {subject, topic, grade, sound} = state;
     state = {subject, topic, grade, sound, number:1, question:null, coins:0, streak:0, correct:0, wrong:0, locked:false, mistakes:[], recent:[]};
     el.finish.hidden = true;
@@ -127,6 +131,7 @@
     el.visual.replaceChildren();
     if (q.visual) renderVisual(q.visual, el.visual);
     updateHud();
+    startAnswerTimer();
   }
 
   function renderChoices(q) {
@@ -176,6 +181,7 @@
     if (state.locked || el.finish.hidden === false) return;
     const q = state.question;
     if (!q) return;
+    clearAnswerTimer();
     state.locked = true;
     const right = which === q.correctIndex;
     if (right) {
@@ -207,6 +213,55 @@
     el.coins.textContent = state.coins;
     el.streak.textContent = state.streak;
     el.next.focus({preventScroll:true});
+    scheduleAdvance();
+  }
+
+  function clearAnswerTimer() {
+    if (answerTimer !== null) {
+      window.clearTimeout(answerTimer);
+      answerTimer = null;
+    }
+  }
+
+  function startAnswerTimer() {
+    clearAnswerTimer();
+    const deadline = performance.now() + ANSWER_LIMIT_MS;
+    const tick = () => {
+      if (state.locked || el.finish.hidden === false) return;
+      const remaining = Math.max(0, deadline - performance.now());
+      const seconds = Math.max(0, Math.ceil(remaining / 1000));
+      el.answerTime.textContent = seconds;
+      el.answerTimerFill.style.width = `${remaining / ANSWER_LIMIT_MS * 100}%`;
+      el.answerTimer.classList.toggle('is-warning', remaining <= 4000);
+      if (remaining <= 0) {
+        answerTimer = null;
+        timeoutQuestion();
+        return;
+      }
+      answerTimer = window.setTimeout(tick, 80);
+    };
+    tick();
+  }
+
+  function timeoutQuestion() {
+    if (state.locked || !state.question) return;
+    const q = state.question;
+    state.locked = true;
+    state.wrong++;
+    state.streak = 0;
+    state.mistakes.push(q);
+    playFeedbackSound(false);
+    startDriveAnimation(Math.floor((q.choiceCount || q.choices.length) / 2), false, q.choiceCount || q.choices.length);
+    el.choices[q.correctIndex].classList.add('is-correct');
+    for (const btn of [...el.choices, ...el.drives]) btn.disabled = true;
+    el.feedback.hidden = false;
+    el.feedback.classList.add('is-error');
+    el.fIcon.textContent = '⏰';
+    el.fTitle.textContent = 'タイムアップ！';
+    el.fText.textContent = `10びょう たったよ。${q.explanation}`;
+    el.next.textContent = 'すぐ つぎへ →';
+    el.progress.style.width = `${state.number / MAX_QUESTIONS * 100}%`;
+    el.streak.textContent = state.streak;
     scheduleAdvance();
   }
 
@@ -257,6 +312,7 @@
     drive.choiceCount = 2;
     drive.isBoss = false;
     drive.selectedChoice = -1;
+    drive.junctionDepth = .1;
     drive.particles.length = 0;
   }
 
@@ -324,6 +380,8 @@
     }
     drive.distance += drive.speed * dt;
     drive.lane += (drive.targetLane - drive.lane) * Math.min(1, dt * 4.8);
+    const junctionSpeed = drive.mode === 'idle' ? .055 : drive.mode === 'success' ? .16 : .09;
+    drive.junctionDepth = Math.min(.86, drive.junctionDepth + junctionSpeed * dt);
     drive.shake = Math.max(0, drive.shake - dt * 1.35);
     drive.flash = Math.max(0, drive.flash - dt * 1.7);
     for (const particle of drive.particles) {
@@ -506,8 +564,9 @@
 
   function drawBranchRoads(ctx, w, h) {
     const count = Math.max(2, drive.choiceCount);
-    const junction = roadPoint(.28);
-    const branchY = h * .37;
+    const junction = roadPoint(drive.junctionDepth);
+    const far = roadPoint(Math.max(.015, drive.junctionDepth - .22));
+    const branchY = far.y;
     const nearSpread = drive.isBoss ? .72 : .62;
     ctx.save();
     ctx.lineJoin = 'round';
@@ -516,7 +575,7 @@
       const targetX = w * (.08 + ratio * .84);
       const nearCenter = junction.center + (ratio - .5) * junction.width * nearSpread;
       const nearHalf = Math.max(8, junction.width / (count * 2.45));
-      const farHalf = Math.max(4, w * .025);
+      const farHalf = Math.max(3, far.width / (count * 2.3));
       const highlighted = drive.selectedChoice === i;
       ctx.fillStyle = highlighted ? '#485f72' : '#334a5d';
       ctx.beginPath();
@@ -541,7 +600,7 @@
       ctx.lineWidth = highlighted ? 2.2 : 1;
       ctx.beginPath();
       ctx.moveTo(nearCenter, junction.y);
-      ctx.quadraticCurveTo((nearCenter + targetX) / 2, h * .43, targetX, branchY + 2);
+      ctx.quadraticCurveTo((nearCenter + targetX) / 2, (junction.y + branchY) / 2, targetX, branchY + 2);
       ctx.stroke();
       ctx.restore();
     }
@@ -555,7 +614,7 @@
   }
 
   function drawBossIntersection(ctx, w, h) {
-    const junction = roadPoint(.2);
+    const junction = roadPoint(drive.junctionDepth);
     const crossY = junction.y + 3;
     const crossWidth = Math.max(w * .48, junction.width * 2.2);
     ctx.save();

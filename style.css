@@ -104,6 +104,12 @@ button:disabled { cursor: default; }
 .world { height: 348px; position: relative; background: linear-gradient(#97ddff 0%, #cdf4ff 52%, #a6e594 52.1%, #65c876 100%); border-radius: 20px; overflow: hidden; margin-top: 13px; isolation: isolate; touch-action: pan-y; }
 .drive-canvas { position: absolute; inset: 0; z-index: 1; display: block; width: 100%; height: 100%; pointer-events: none; }
 .world::before { content: ""; position: absolute; inset: 0; z-index: 4; pointer-events: none; opacity: 0; background: radial-gradient(circle at 50% 80%, #ffffffb8 0, #ffffff00 48%); }
+.answer-timer { position: absolute; right: 10px; bottom: 8px; z-index: 8; display: grid; grid-template-columns: auto auto auto; align-items: center; gap: 3px; min-width: 92px; padding: 5px 7px 6px; border: 1px solid #ffffff8c; border-radius: 10px; color: #fff; background: #183553cc; box-shadow: 0 4px 12px #102c4a33; font-size: 10px; font-weight: 900; font-variant-numeric: tabular-nums; transition: background .2s, transform .2s; }
+.answer-timer strong { font-size: 16px; line-height: 1; }
+.answer-timer-track { grid-column: 1 / -1; height: 4px; overflow: hidden; border-radius: 9px; background: #ffffff55; }
+.answer-timer-track span { display: block; width: 100%; height: 100%; border-radius: inherit; background: #ffe27a; transition: width .08s linear; }
+.answer-timer.is-warning { background: #9d3d55e8; transform: scale(1.06); }
+.answer-timer.is-warning .answer-timer-track span { background: #fff0a1; }
 .world.is-correct-route::before { animation: success-flash .9s ease-out both; }
 .world.is-wrong-route::before { background: radial-gradient(circle at 50% 80%, #ffd8a866 0, #ffd8a800 52%); animation: wrong-flash .75s ease-out both; }
 .sun { position: absolute; width: 53px; height: 53px; background: #ffe879; box-shadow: 0 0 0 12px #fffa9b42; right: 11%; top: 10%; border-radius: 100%; }
@@ -320,5 +326,7 @@ kbd { background: #f1f4f9; border: 1px solid #e1e7f0; border-radius: 4px; paddin
   .road-choices .choice-direction { font-size: 9px; }
   .world.is-boss .road-choices { top: 15%; }
   .boss-badge { top: 5px; font-size: 8px; padding: 3px 8px; }
+  .answer-timer { right: 7px; bottom: 7px; min-width: 82px; padding: 4px 6px 5px; font-size: 9px; }
+  .answer-timer strong { font-size: 14px; }
   .controls-row.is-boss .control-hint { min-width: 160px; padding: 8px 13px; }
 }

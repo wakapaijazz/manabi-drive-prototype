@@ -132,6 +132,67 @@
     };
   }
 
+  function multiChoices(question, choices, correctIndex, extra = {}) {
+    return {
+      id: question.id || `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      interaction: 'route',
+      choiceCount: choices.length,
+      question: question.question || question.text || '',
+      choices: choices.map(String),
+      correctIndex,
+      explanation: question.explanation || `せいかいは「${choices[correctIndex]}」だよ。`,
+      ...extra
+    };
+  }
+
+  function bossifyQuestion(q, subject) {
+    if (!q || q.choiceCount > 2 || (q.visual?.type === 'compare' && (q.choices || []).every(choice => choice === 'A' || choice === 'B'))) return q;
+    const correctText = String(q.choices[q.correctIndex]);
+    const pool = [];
+    const numeric = Number(correctText.replaceAll(',', ''));
+    if (/^-?\d+(\.\d+)?$/.test(correctText.replaceAll(',', '')) && Number.isFinite(numeric)) {
+      const step = Math.max(1, Math.round(Math.abs(numeric) * .1));
+      for (const delta of [step, -step, step * 2, -step * 2, 5, -5, 10, -10, 20, -20]) {
+        const value = numeric + delta;
+        if (value > 0 && Number.isFinite(value)) pool.push(Number.isInteger(value) ? String(value) : value.toFixed(1));
+      }
+    } else {
+      const clock = correctText.match(/^(\d{1,2})時(\d{2})分$/);
+      if (clock) {
+        const hour = Number(clock[1]);
+        const minute = Number(clock[2]);
+        const clockText = (h, m) => `${((h - 1) % 12) + 1}時${String((m + 60) % 60).padStart(2, '0')}分`;
+        pool.push(clockText(hour + 1, minute), clockText(hour, minute + 5), clockText(hour, minute + 10));
+      } else if (subject === 'kanji') {
+        const kind = q.tag?.includes('かんじを') ? 'writing' : q.tag?.includes('じゅくご') ? 'compound' : 'reading';
+        pool.push(...KANJI.filter(entry => entry.kind === kind).map(entry => entry.answer));
+      } else if (subject === 'english') {
+        const isEnglish = /^[A-Za-z]/.test(correctText);
+        if (isEnglish && /[ .!?]/.test(correctText)) pool.push(...ENGLISH_SENTENCES.map(entry => entry.english));
+        else if (isEnglish) pool.push(...ENGLISH_WORDS.map(entry => entry.word));
+        else if (q.speech && q.speech.includes(' ')) pool.push(...ENGLISH_SENTENCES.map(entry => entry.japanese));
+        else pool.push(...ENGLISH_WORDS.map(entry => entry.meaning));
+      }
+    }
+
+    const choices = [correctText];
+    for (const candidate of [...q.choices, ...pool].sort(() => Math.random() - .5)) {
+      const text = String(candidate);
+      if (!choices.includes(text)) choices.push(text);
+      if (choices.length >= (Math.random() < .5 ? 3 : 4)) break;
+    }
+    if (choices.length < 3) return q;
+    const shuffled = [...choices].sort(() => Math.random() - .5);
+    return {
+      ...q,
+      choices: shuffled,
+      choiceCount: shuffled.length,
+      correctIndex: shuffled.indexOf(correctText),
+      routeMode: 'boss',
+      isBoss: true
+    };
+  }
+
   function wrongNumber(correct, max = 999) {
     const delta = pick([1, 2, 3, 5, 10, 11, 20]);
     const cand = correct + (coin() ? delta : -delta);
@@ -177,15 +238,34 @@
     });
   }
 
-  function mathCompare() {
+  function mathCompare(boss = false) {
     const mode = pick(['count', 'length', 'weight']);
     const a = rand(mode === 'count' ? 3 : 2, mode === 'count' ? 13 : 9);
     let b = rand(mode === 'count' ? 3 : 2, mode === 'count' ? 13 : 9);
     if (a === b) b = a === 9 ? a - 2 : a + 2;
-    const correct = a > b ? 'A' : 'B';
+    const count = boss ? (coin() ? 3 : 4) : 2;
+    const values = [a, b];
+    while (values.length < count) {
+      const next = rand(mode === 'count' ? 3 : 2, mode === 'count' ? 13 : 9);
+      if (!values.includes(next)) values.push(next);
+    }
+    const labels = values.map((_, index) => String.fromCharCode(65 + index));
+    const correctIndex = values.indexOf(Math.max(...values));
+    const correct = labels[correctIndex];
     const wrong = correct === 'A' ? 'B' : 'A';
-    const prompt = mode === 'count' ? 'AとB、どちらの ブロックが おおい？' : mode === 'length' ? 'AとB、どちらの ぼうが ながい？' : 'AとB、どちらが おもい？';
+    const subjectText = mode === 'count' ? 'ブロックが おおい' : mode === 'length' ? 'ぼうが ながい' : 'おもい';
     const unit = mode === 'weight' ? 'kg' : mode === 'count' ? 'こ' : '';
+    if (boss) {
+      return multiChoices({
+        question: `${labels.join('・')}の なかで、どれが ${subjectText}？`,
+        explanation: `${values.map((value, index) => `${labels[index]} は ${value}${unit}`).join('、')}。${correct} のほうだよ。`
+      }, labels, correctIndex, {
+        visual: {type:'compare', mode, items: values.map((value, index) => ({label:labels[index], value}))},
+        routeMode: 'boss',
+        isBoss: true
+      });
+    }
+    const prompt = mode === 'count' ? 'AとB、どちらの ブロックが おおい？' : mode === 'length' ? 'AとB、どちらの ぼうが ながい？' : 'AとB、どちらが おもい？';
     return twoChoices({question:prompt, explanation:`A は ${a}${unit}、B は ${b}${unit}。${correct} のほうだよ。`}, correct, wrong, {
       visual: {type:'compare', mode, a, b}
     });
@@ -265,17 +345,21 @@
     return twoChoices({id:e.id, question:`「${e.english}」の いみは？`, explanation:`${e.english} = ${e.japanese}`, }, e.japanese, other.japanese, {speech:e.english, tag:'えいぶん'});
   }
 
-  function generateQuestion({subject='math', topic='mix', grade=3, recentIds=[]}={}) {
+  function generateQuestion({subject='math', topic='mix', grade=3, recentIds=[], boss=false}={}) {
+    let question;
     if (subject === 'math') {
       const available = ['addsub', 'multiply', 'divide', 'count', 'compare', 'clock'];
       const kind = topic === 'mix' ? pick(available) : topic;
-      if (['addsub','multiply','divide'].includes(kind)) return {...mathCalculation(kind), tag: {addsub:'たし算・ひき算',multiply:'かけ算',divide:'わり算'}[kind]};
-      if (kind === 'count') return {...mathBlocks(), tag:'かずを かぞえる'};
-      if (kind === 'compare') return {...mathCompare(), tag:'くらべる'};
-      return {...mathClock(), tag:'とけい'};
+      if (['addsub','multiply','divide'].includes(kind)) question = {...mathCalculation(kind), tag: {addsub:'たし算・ひき算',multiply:'かけ算',divide:'わり算'}[kind]};
+      else if (kind === 'count') question = {...mathBlocks(), tag:'かずを かぞえる'};
+      else if (kind === 'compare') question = {...mathCompare(boss), tag:'くらべる'};
+      else question = {...mathClock(), tag:'とけい'};
+    } else if (subject === 'kanji') {
+      question = kanjiQuestion(topic, Number(grade), recentIds);
+    } else {
+      question = englishQuestion(topic, recentIds);
     }
-    if (subject === 'kanji') return kanjiQuestion(topic, Number(grade), recentIds);
-    return englishQuestion(topic, recentIds);
+    return boss && !question.isBoss ? bossifyQuestion(question, subject) : question;
   }
 
   // 開発コンソールからも参照できるように公開

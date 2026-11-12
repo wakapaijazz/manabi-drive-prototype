@@ -31,8 +31,9 @@
     tabs: [...document.querySelectorAll('[data-subject]')],
     topic: $('topicSelect'), grade: $('gradeSelect'), gradeWrap: $('gradeWrap'),
     qKind: $('questionKind'), qGrade: $('questionGrade'), qText: $('questionText'), visual: $('questionVisual'),
-    choices: [$('choiceLeft'), $('choiceRight')], choiceTexts: [$('choiceLeftText'), $('choiceRightText')],
-    drives: [$('goLeft'), $('goRight')], world: $('world'), canvas: $('driveCanvas'),
+    choices: [], roadChoices: $('roadChoices'),
+    drives: [$('goLeft'), $('goRight')], controlsRow: document.querySelector('.controls-row'), controlHint: document.querySelector('.control-hint'),
+    world: $('world'), canvas: $('driveCanvas'), bossBadge: $('bossBadge'), worldTip: $('worldTip'),
     feedback: $('feedback'), fIcon: $('feedbackIcon'), fTitle: $('feedbackTitle'), fText: $('feedbackText'),
     next: $('nextButton'), coins: $('coinCount'), streak: $('streakCount'), counter: $('questionCounter'),
     progress: $('progressFill'), sound: $('soundButton'),
@@ -52,8 +53,8 @@
   const drive = {
     ctx: null, width: 0, height: 0, dpr: 1, lastTime: 0, frame: 0,
     distance: 0, speed: .12, lane: 0, targetLane: 0,
-    mode: 'idle', turnSide: 0, turnProgress: 0, shake: 0, flash: 0,
-    particles: []
+    mode: 'idle', phase: 'cruise', turnSide: 0, turnProgress: 0, shake: 0, flash: 0,
+    choiceCount: 2, isBoss: false, boost: 0, particles: []
   };
 
   function saveLocal(key, value) {
@@ -98,16 +99,16 @@
     el.feedback.hidden = true;
     el.feedback.classList.remove('is-error');
     resetDriveAnimation();
-    for (const btn of [...el.choices, ...el.drives]) {
+    for (const btn of el.drives) {
       btn.disabled = false;
       btn.classList.remove('is-correct', 'is-wrong');
     }
-    for (const stateIcon of document.querySelectorAll('.answer-state')) stateIcon.textContent = '';
 
     // まちがえた問題は、すこし後で復習として再出題する
-    const revisit = state.mistakes.length > 0 && state.number % 4 === 0;
+    const boss = state.number % 4 === 0;
+    const revisit = state.mistakes.length > 0 && state.number % 4 === 0 && !boss;
     const q = revisit ? state.mistakes.shift() : window.StudyQuestions.generateQuestion({
-      subject:state.subject, topic:state.topic, grade:state.grade, recentIds:state.recent
+      subject:state.subject, topic:state.topic, grade:state.grade, recentIds:state.recent, boss
     });
     state.question = q;
     if (!revisit) state.recent = [...state.recent.slice(-16), q.id];
@@ -116,12 +117,47 @@
     el.qKind.textContent = q.tag || ({math:'さんすう',kanji:'かんじ',english:'えいご'}[state.subject]);
     el.qGrade.hidden = !q.gradeTag;
     if (!el.qGrade.hidden) el.qGrade.textContent = q.gradeTag;
-    el.choiceTexts[0].textContent = q.choices[0];
-    el.choiceTexts[1].textContent = q.choices[1];
+    renderChoices(q);
     el.speak.hidden = !q.speech;
     el.visual.replaceChildren();
     if (q.visual) renderVisual(q.visual, el.visual);
     updateHud();
+  }
+
+  function renderChoices(q) {
+    const count = Math.max(2, q.choiceCount || q.choices.length);
+    const directions = count === 2
+      ? ['↖ ひだり', 'みぎ ↗']
+      : Array.from({length: count}, (_, index) => `${index === 0 ? '↖' : index === count - 1 ? '↗' : '↑'} ${index + 1}ばん`);
+    el.roadChoices.className = `road-choices choice-count-${count}`;
+    el.roadChoices.style.setProperty('--choice-count', String(count));
+    el.roadChoices.replaceChildren();
+    el.choices = q.choices.map((choice, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `road-choice choice-slot-${index}${count === 2 ? (index === 0 ? ' road-choice-left' : ' road-choice-right') : ''}`;
+      button.setAttribute('aria-label', count === 2 ? `${index === 0 ? 'ひだり' : 'みぎ'}の こたえ` : `${index + 1}ばんめの こたえ`);
+      button.innerHTML = `<span class="choice-direction">${directions[index]}</span><strong></strong><span class="answer-state" aria-hidden="true"></span>`;
+      button.querySelector('strong').textContent = choice;
+      button.addEventListener('click', () => choose(index));
+      el.roadChoices.append(button);
+      return button;
+    });
+    const isBoss = count > 2;
+    drive.choiceCount = count;
+    drive.isBoss = isBoss;
+    el.world.classList.toggle('is-boss', isBoss);
+    el.bossBadge.hidden = !isBoss;
+    el.worldTip.textContent = isBoss ? 'BOSS CROSSING！どのゲートに すすむ？' : 'どっちの みちに すすむ？';
+    updateDriveControls(isBoss);
+  }
+
+  function updateDriveControls(isBoss) {
+    el.controlsRow.classList.toggle('is-boss', isBoss);
+    for (const btn of el.drives) btn.hidden = isBoss;
+    el.controlHint.innerHTML = isBoss
+      ? '🎯<span>1〜4キー または<br>みちを タップ！</span>'
+      : '🚗<span>タップして<br>ハンドルを きろう！</span>';
   }
 
   function updateHud() {
@@ -149,7 +185,7 @@
       playFeedbackSound(false);
     }
 
-    startDriveAnimation(which, right);
+    startDriveAnimation(which, right, q.choiceCount || q.choices.length);
     el.choices[q.correctIndex].classList.add('is-correct');
     if (!right) el.choices[which].classList.add('is-wrong');
     el.choices[q.correctIndex].querySelector('.answer-state').textContent = '✅';
@@ -204,24 +240,33 @@
   }
 
   function resetDriveAnimation() {
-    el.world.classList.remove('is-driving', 'is-turning-left', 'is-turning-right', 'is-correct-route', 'is-wrong-route');
+    el.world.classList.remove('is-driving', 'is-turning-left', 'is-turning-right', 'is-correct-route', 'is-wrong-route', 'is-boss');
     drive.mode = 'idle';
+    drive.phase = 'cruise';
     drive.turnSide = 0;
     drive.targetLane = 0;
     drive.turnProgress = 0;
     drive.shake = 0;
     drive.flash = 0;
+    drive.boost = 0;
+    drive.choiceCount = 2;
+    drive.isBoss = false;
     drive.particles.length = 0;
   }
 
-  function startDriveAnimation(which, right) {
-    const side = which === 0 ? 'left' : 'right';
-    el.world.classList.add('is-driving', `is-turning-${side}`, right ? 'is-correct-route' : 'is-wrong-route');
+  function startDriveAnimation(which, right, choiceCount = 2) {
+    drive.choiceCount = choiceCount;
+    drive.isBoss = choiceCount > 2;
+    drive.turnSide = choiceCount === 2 ? (which === 0 ? -1 : 1) : ((which / (choiceCount - 1)) * 2 - 1);
+    const side = drive.turnSide < -.18 ? 'left' : drive.turnSide > .18 ? 'right' : '';
+    el.world.classList.add('is-driving', right ? 'is-correct-route' : 'is-wrong-route');
+    el.world.classList.toggle('is-turning-left', side === 'left');
+    el.world.classList.toggle('is-turning-right', side === 'right');
     drive.mode = right ? 'success' : 'miss';
-    drive.turnSide = which === 0 ? -1 : 1;
-    drive.targetLane = drive.turnSide * .82;
+    drive.phase = right ? 'turn' : 'brake';
+    drive.targetLane = drive.turnSide * (choiceCount > 2 ? .9 : .82);
     drive.turnProgress = 0;
-    drive.shake = right ? .2 : .65;
+    drive.shake = right ? .14 : .65;
     drive.flash = 1;
     spawnDriveEffects(which, right);
   }
@@ -256,11 +301,22 @@
   }
 
   function updateDrive(dt) {
-    const targetSpeed = drive.mode === 'success' ? .68 : drive.mode === 'miss' ? .4 : .12;
-    drive.speed += (targetSpeed - drive.speed) * Math.min(1, dt * 4.5);
+    if (drive.mode === 'success') {
+      drive.turnProgress = Math.min(1, drive.turnProgress + dt * 1.08);
+      if (drive.turnProgress > .52) drive.phase = 'boost';
+      const targetSpeed = drive.phase === 'boost' ? 1.42 : .56;
+      drive.speed += (targetSpeed - drive.speed) * Math.min(1, dt * (drive.phase === 'boost' ? 3.2 : 7.2));
+      drive.boost += ((drive.phase === 'boost' ? 1 : 0) - drive.boost) * Math.min(1, dt * 5);
+    } else if (drive.mode === 'miss') {
+      drive.turnProgress = Math.min(1, drive.turnProgress + dt * .7);
+      drive.speed += (.33 - drive.speed) * Math.min(1, dt * 5.5);
+      drive.boost += (0 - drive.boost) * Math.min(1, dt * 6);
+    } else {
+      drive.speed += (.12 - drive.speed) * Math.min(1, dt * 4.5);
+      drive.boost += (0 - drive.boost) * Math.min(1, dt * 4);
+    }
     drive.distance += drive.speed * dt;
     drive.lane += (drive.targetLane - drive.lane) * Math.min(1, dt * 4.8);
-    if (drive.mode !== 'idle') drive.turnProgress = Math.min(1, drive.turnProgress + dt * .72);
     drive.shake = Math.max(0, drive.shake - dt * 1.35);
     drive.flash = Math.max(0, drive.flash - dt * 1.7);
     for (const particle of drive.particles) {
@@ -278,9 +334,10 @@
   function roadPoint(depth) {
     const p = clamp(depth, 0, 1);
     const horizon = drive.height * .45;
+    const turnAmount = drive.turnProgress * drive.turnProgress * (3 - 2 * drive.turnProgress);
     const curve = drive.mode === 'idle'
       ? Math.sin(drive.distance * .65 + p * 2.2) * .025
-      : drive.turnSide * drive.turnProgress * .34 * Math.pow(p, 1.65);
+      : drive.turnSide * turnAmount * (drive.isBoss ? .42 : .34) * Math.pow(p, 1.65);
     return {
       y: horizon + Math.pow(p, 1.58) * (drive.height - horizon + 18),
       center: drive.width / 2 + curve * drive.width,
@@ -426,7 +483,8 @@
       if ((i + movingDash) % 3 !== 0) continue;
       ctx.strokeStyle = '#dfe8e2cc';
       ctx.lineWidth = Math.max(1, near.width * .016);
-      for (const lane of [-.33, .33]) {
+      const laneMarks = drive.isBoss ? [-.5, -.17, .17, .5] : [-.33, .33];
+      for (const lane of laneMarks) {
         ctx.beginPath();
         ctx.moveTo(far.center + far.width * lane, far.y);
         ctx.lineTo(near.center + near.width * lane, near.y);
@@ -434,29 +492,77 @@
       }
     }
 
-    const fork = roadPoint(.1);
-    ctx.strokeStyle = '#fff4c4cc';
-    ctx.lineWidth = 4;
-    for (const side of [-1, 1]) {
-      ctx.beginPath();
-      ctx.moveTo(fork.center + side * fork.width * .06, fork.y);
-      ctx.lineTo(w / 2 + side * w * .36, h * .42);
-      ctx.stroke();
+    if (drive.isBoss) drawBossIntersection(ctx, w, h);
+    else {
+      const fork = roadPoint(.1);
+      ctx.strokeStyle = '#fff4c4cc';
+      ctx.lineWidth = 4;
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(fork.center + side * fork.width * .06, fork.y);
+        ctx.lineTo(w / 2 + side * w * .36, h * .42);
+        ctx.stroke();
+      }
     }
   }
 
+  function drawBossIntersection(ctx, w, h) {
+    const junction = roadPoint(.2);
+    const crossY = junction.y + 3;
+    const crossWidth = Math.max(w * .48, junction.width * 2.2);
+    ctx.save();
+    ctx.globalAlpha = .92;
+    ctx.fillStyle = '#263b50';
+    ctx.beginPath();
+    ctx.moveTo(junction.center - crossWidth, crossY - 9);
+    ctx.lineTo(junction.center + crossWidth, crossY - 9);
+    ctx.lineTo(junction.center + crossWidth * .94, crossY + 18);
+    ctx.lineTo(junction.center - crossWidth * .94, crossY + 18);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#f8e5a5'; ctx.lineWidth = 3;
+    for (let x = junction.center - crossWidth * .8; x < junction.center + crossWidth * .8; x += 32) {
+      ctx.beginPath(); ctx.moveTo(x, crossY - 7); ctx.lineTo(x + 8, crossY + 16); ctx.stroke();
+    }
+    const branchStart = roadPoint(.1);
+    const branchY = h * .37;
+    ctx.shadowColor = '#fff2a5'; ctx.shadowBlur = 10;
+    ctx.strokeStyle = '#fff0a8'; ctx.lineWidth = 3;
+    for (let i = 0; i < drive.choiceCount; i++) {
+      const ratio = drive.choiceCount === 1 ? .5 : i / (drive.choiceCount - 1);
+      const targetX = w * (.14 + ratio * .72);
+      ctx.beginPath();
+      ctx.moveTo(branchStart.center + (ratio - .5) * branchStart.width * .6, branchStart.y);
+      ctx.quadraticCurveTo(w / 2 + (targetX - w / 2) * .35, h * .4, targetX, branchY);
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#eaffff';
+    ctx.fillRect(w * .2, h * .31, w * .6, 5);
+    ctx.fillStyle = '#ffcf5c';
+    ctx.fillRect(w * .2, h * .31, 8, 34);
+    ctx.fillRect(w * .8 - 8, h * .31, 8, 34);
+    ctx.fillStyle = '#ff5d73';
+    ctx.beginPath(); ctx.arc(w * .5, h * .325, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
   function drawSpeedLines(ctx, w, h) {
-    const intensity = clamp((drive.speed - .12) * 2.7, 0, 1);
+    const intensity = clamp((drive.speed - .12) * 1.9, 0, 1);
     if (intensity <= 0) return;
     ctx.save();
-    ctx.globalAlpha = intensity * .42;
+    ctx.globalAlpha = intensity * (.35 + drive.boost * .35);
     ctx.strokeStyle = '#ffffff';
     ctx.lineCap = 'round';
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < (drive.boost > .2 ? 16 : 9); i++) {
       const x = ((i * 97 + drive.distance * 380) % (w + 80)) - 40;
       const y = h * (.3 + (i % 5) * .12);
-      ctx.lineWidth = 1 + (i % 3);
+      ctx.lineWidth = 1 + (i % 3) + drive.boost * 1.4;
       ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - drive.turnSide * 18, y + 24 + intensity * 28); ctx.stroke();
+    }
+    if (drive.boost > .3) {
+      ctx.globalAlpha = drive.boost * .2;
+      ctx.fillStyle = '#baf5ff';
+      ctx.fillRect(0, h * .38, w, h * .02);
     }
     ctx.restore();
   }
@@ -464,36 +570,88 @@
   function drawCar(ctx, w, h, time) {
     const road = roadPoint(1);
     const x = road.center + drive.lane * road.width * .24;
-    const y = h - 18 + Math.sin(time * 22) * (drive.mode === 'idle' ? 1 : 3);
-    const tilt = drive.lane * .2 + Math.sin(time * 18) * (drive.mode === 'idle' ? .01 : .025);
-    const scale = clamp(w / 620, .62, 1.08);
+    const y = h - 20 + Math.sin(time * 22) * (drive.mode === 'idle' ? 1 : 2.6);
+    const tilt = drive.lane * .22 + Math.sin(time * 18) * (drive.mode === 'idle' ? .01 : .025);
+    const scale = clamp(w / 620, .62, 1.12);
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(tilt);
     ctx.scale(scale, scale);
-    if (drive.mode === 'success') {
-      ctx.fillStyle = '#ffe887';
-      ctx.beginPath(); ctx.moveTo(-18, 4); ctx.lineTo(-7, 4); ctx.lineTo(-13, 28 + Math.random() * 8); ctx.closePath(); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(18, 4); ctx.lineTo(7, 4); ctx.lineTo(13, 28 + Math.random() * 8); ctx.closePath(); ctx.fill();
+
+    if (drive.boost > .05) {
+      const flame = 18 + Math.sin(time * 38) * 6 + drive.boost * 22;
+      ctx.globalAlpha = .55 + drive.boost * .35;
+      ctx.shadowColor = '#ffdf62'; ctx.shadowBlur = 20;
+      ctx.fillStyle = '#fff4a3';
+      ctx.beginPath(); ctx.moveTo(-22, 3); ctx.lineTo(-9, 2); ctx.lineTo(-15, flame); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(22, 3); ctx.lineTo(9, 2); ctx.lineTo(15, flame); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ff8b45';
+      ctx.beginPath(); ctx.moveTo(-18, 4); ctx.lineTo(-11, 4); ctx.lineTo(-15, flame * .72); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(18, 4); ctx.lineTo(11, 4); ctx.lineTo(15, flame * .72); ctx.closePath(); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
     }
+
     ctx.fillStyle = '#14283e55';
-    ctx.beginPath(); ctx.ellipse(0, 7, 43, 10, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#222f43';
-    ctx.fillRect(-39, -57, 12, 28); ctx.fillRect(27, -57, 12, 28);
-    ctx.fillRect(-39, -20, 12, 24); ctx.fillRect(27, -20, 12, 24);
-    const body = ctx.createLinearGradient(-34, -92, 34, 0);
-    body.addColorStop(0, '#5db7ff'); body.addColorStop(.52, '#2378df'); body.addColorStop(1, '#144aaf');
+    ctx.beginPath(); ctx.ellipse(0, 7, 47, 11, 0, 0, Math.PI * 2); ctx.fill();
+
+    drawRacingWheel(ctx, -35, -19, time * drive.speed * 8);
+    drawRacingWheel(ctx, 35, -19, time * drive.speed * 8);
+    drawRacingWheel(ctx, -30, -70, time * drive.speed * 8);
+    drawRacingWheel(ctx, 30, -70, time * drive.speed * 8);
+
+    // rear wing and aerodynamic side pods
+    ctx.fillStyle = '#101d36';
+    roundedRect(ctx, -43, -1, 86, 8, 3); ctx.fill();
+    ctx.fillStyle = '#55d8ff';
+    ctx.fillRect(-36, -4, 72, 3);
+    ctx.fillStyle = '#1c3762';
+    roundedRect(ctx, -42, -51, 16, 35, 6); ctx.fill();
+    roundedRect(ctx, 26, -51, 16, 35, 6); ctx.fill();
+
+    // low, pointed formula-style body
+    const body = ctx.createLinearGradient(-36, -112, 36, 8);
+    body.addColorStop(0, '#a8edff'); body.addColorStop(.16, '#53c7ff'); body.addColorStop(.54, '#2479e5'); body.addColorStop(1, '#102f89');
     ctx.fillStyle = body;
-    roundedRect(ctx, -34, -93, 68, 96, 21); ctx.fill();
-    ctx.strokeStyle = '#0d4396'; ctx.lineWidth = 3; ctx.stroke();
-    ctx.fillStyle = '#baf2ff';
-    ctx.beginPath(); ctx.moveTo(-25, -61); ctx.quadraticCurveTo(0, -76, 25, -61); ctx.lineTo(28, -35); ctx.quadraticCurveTo(0, -27, -28, -35); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = '#ffffffcc'; ctx.lineWidth = 2; ctx.stroke();
-    ctx.fillStyle = '#6dc8ff';
-    ctx.beginPath(); ctx.moveTo(-27, -22); ctx.quadraticCurveTo(0, -16, 27, -22); ctx.lineTo(25, -4); ctx.quadraticCurveTo(0, 1, -25, -4); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#fff6bf'; ctx.fillRect(-25, -82, 13, 6); ctx.fillRect(12, -82, 13, 6);
-    ctx.fillStyle = '#f87991'; ctx.fillRect(-24, -5, 12, 5); ctx.fillRect(12, -5, 12, 5);
+    ctx.beginPath();
+    ctx.moveTo(0, -112);
+    ctx.lineTo(14, -94); ctx.lineTo(23, -63); ctx.lineTo(34, -27);
+    ctx.lineTo(28, -5); ctx.lineTo(0, 5); ctx.lineTo(-28, -5);
+    ctx.lineTo(-34, -27); ctx.lineTo(-23, -63); ctx.lineTo(-14, -94); ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#092d83'; ctx.lineWidth = 3; ctx.stroke();
+
+    // cockpit / canopy
+    ctx.fillStyle = '#102c59';
+    ctx.beginPath(); ctx.moveTo(-17, -78); ctx.quadraticCurveTo(0, -94, 17, -78); ctx.lineTo(14, -46); ctx.quadraticCurveTo(0, -37, -14, -46); ctx.closePath(); ctx.fill();
+    const canopy = ctx.createLinearGradient(0, -83, 0, -43);
+    canopy.addColorStop(0, '#efffff'); canopy.addColorStop(.45, '#7ee6ff'); canopy.addColorStop(1, '#2d8fd6');
+    ctx.fillStyle = canopy;
+    ctx.beginPath(); ctx.moveTo(-12, -76); ctx.quadraticCurveTo(0, -87, 12, -76); ctx.lineTo(10, -51); ctx.quadraticCurveTo(0, -45, -10, -51); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#d9fbff'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = '#ffffffa8'; ctx.fillRect(-7, -73, 4, 20);
+
+    // nose, front wing and neon trim
+    ctx.fillStyle = '#e8fbff';
+    ctx.beginPath(); ctx.moveTo(-11, -102); ctx.lineTo(0, -114); ctx.lineTo(11, -102); ctx.lineTo(7, -94); ctx.lineTo(-7, -94); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#122451'; ctx.fillRect(-43, -105, 86, 5); ctx.fillRect(-33, -110, 66, 4);
+    ctx.strokeStyle = '#7ff5ff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(-27, -28); ctx.lineTo(-18, -16); ctx.lineTo(-8, -10); ctx.moveTo(27, -28); ctx.lineTo(18, -16); ctx.lineTo(8, -10); ctx.stroke();
+    ctx.fillStyle = '#fff3a7'; ctx.fillRect(-19, -88, 9, 5); ctx.fillRect(10, -88, 9, 5);
+    ctx.fillStyle = '#ff617b'; ctx.fillRect(-22, -2, 13, 4); ctx.fillRect(9, -2, 13, 4);
     ctx.restore();
+  }
+
+  function drawRacingWheel(ctx, x, y, spin) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(spin);
+    ctx.fillStyle = '#111c2c';
+    ctx.beginPath(); ctx.ellipse(0, 0, 8, 16, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#91a6bd';
+    ctx.beginPath(); ctx.ellipse(0, 0, 3.5, 8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#dff5ff';
+    ctx.fillRect(-1, -6, 2, 12); ctx.restore();
   }
 
   function roundedRect(ctx, x, y, width, height, radius) {
@@ -602,7 +760,10 @@
     }
     if (v.type === 'compare') {
       const box = makeNode('div','visual-compare');
-      for (const [label, n] of [['A',v.a],['B',v.b]]) {
+      const items = v.items || [['A', v.a], ['B', v.b]].map(([label, value]) => ({label, value}));
+      for (const item of items) {
+        const label = item.label;
+        const n = item.value;
         const card = makeNode('div','compare-item');
         card.append(makeNode('span','compare-label',label));
         if (v.mode === 'count') card.append(makeBlocks(n,true));
@@ -686,7 +847,6 @@
   }
   el.topic.addEventListener('change', () => {state.topic = el.topic.value; resetGame();});
   el.grade.addEventListener('change', () => {state.grade = Number(el.grade.value); resetGame();});
-  el.choices.forEach((btn,i)=>btn.addEventListener('click',()=>choose(i)));
   el.drives.forEach((btn,i)=>btn.addEventListener('click',()=>choose(i)));
   el.next.addEventListener('click',advance);
   el.restart.addEventListener('click',resetGame);
@@ -707,7 +867,13 @@
     }
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
       event.preventDefault();
-      choose(event.key === 'ArrowLeft' ? 0 : 1);
+      choose(event.key === 'ArrowLeft' ? 0 : Math.min(el.choices.length - 1, el.choices.length > 2 ? el.choices.length - 1 : 1));
+    } else if (/^[1-4]$/.test(event.key)) {
+      const index = Number(event.key) - 1;
+      if (index < el.choices.length) {
+        event.preventDefault();
+        choose(index);
+      }
     } else if ((event.key === 'Enter' || event.key === ' ') && state.locked && document.activeElement === document.body) {
       event.preventDefault(); advance();
     }
@@ -723,7 +889,13 @@
     if (!swipeStart || event.pointerId !== swipeStart.pointerId) return;
     const dx = event.clientX - swipeStart.x;
     const dy = event.clientY - swipeStart.y;
-    if (Math.abs(dx)>55 && Math.abs(dx)>Math.abs(dy)*1.7) choose(dx < 0 ? 0 : 1);
+    if (Math.abs(dx)>55 && Math.abs(dx)>Math.abs(dy)*1.7) {
+      if (el.choices.length > 2) {
+        const rect = el.roadChoices.getBoundingClientRect();
+        const ratio = clamp((event.clientX - rect.left) / Math.max(1, rect.width), 0, .999);
+        choose(Math.floor(ratio * el.choices.length));
+      } else choose(dx < 0 ? 0 : 1);
+    }
     swipeStart = null;
   }, {passive:true});
   el.world.addEventListener('pointercancel', () => { swipeStart = null; }, {passive:true});

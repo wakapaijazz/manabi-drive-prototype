@@ -24,7 +24,7 @@
         </div>
       </div>
       <div class="top-actions">
-        <span class="header-tag">こどものための 2たくゲーム</span>
+        <span class="header-tag">こどものための 2〜4たくゲーム</span>
         <button type="button" id="soundButton" class="icon-button" aria-pressed="true" title="こうかおんのオン・オフ">🔊 <span>おと ON</span></button>
       </div>
     </header>
@@ -89,9 +89,9 @@
 
         <div class="world" id="world" aria-label="どちらの みちが せいかいかな？">
           <canvas id="driveCanvas" class="drive-canvas" aria-hidden="true"></canvas>
-          <button type="button" id="choiceLeft" class="road-choice road-choice-left" aria-label="ひだりの こたえ"><span class="choice-direction">↖ ひだり</span><strong id="choiceLeftText">12</strong><span class="answer-state" aria-hidden="true"></span></button>
-          <button type="button" id="choiceRight" class="road-choice road-choice-right" aria-label="みぎの こたえ"><span class="choice-direction">みぎ ↗</span><strong id="choiceRightText">13</strong><span class="answer-state" aria-hidden="true"></span></button>
-          <div class="world-tip">どっちの みちに すすむ？</div>
+          <div id="roadChoices" class="road-choices choice-count-2" aria-label="こたえの みち"></div>
+          <div id="bossBadge" class="boss-badge" hidden>⚡ BOSS CROSSING</div>
+          <div id="worldTip" class="world-tip">どっちの みちに すすむ？</div>
         </div>
 
         <div class="controls-row">
@@ -105,7 +105,7 @@
           <div class="feedback-copy"><strong id="feedbackTitle">せいかい！</strong><p id="feedbackText">よくできました！</p></div>
           <button type="button" id="nextButton" class="next-button">すぐ つぎへ →</button>
         </div>
-        <div class="game-footnote"><span>⌨️ PCでは <kbd>←</kbd> <kbd>→</kbd> キーでも あそべるよ</span><span>🫶 まちがえても ライフは へらないよ</span></div>
+        <div class="game-footnote"><span>⌨️ PCでは <kbd>←</kbd> <kbd>→</kbd>、交差点では <kbd>1</kbd>〜<kbd>4</kbd> キーでも あそべるよ</span><span>🫶 まちがえても ライフは へらないよ</span></div>
       </section>
     </main>
     <footer class="page-footer">まなびドライブ・プロトタイプ ｜ おとなのひとへ：問題は <code>questions.js</code> にあります。記録はこの端末内だけに保存します。</footer>

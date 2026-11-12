@@ -569,7 +569,8 @@
 
   function drawCar(ctx, w, h, time) {
     const road = roadPoint(1);
-    const x = road.center + drive.lane * road.width * .24;
+    const rawX = road.center + drive.lane * road.width * .24;
+    const x = clamp(rawX, w * .13, w * .87);
     const y = h - 20 + Math.sin(time * 22) * (drive.mode === 'idle' ? 1 : 2.6);
     const tilt = drive.lane * .22 + Math.sin(time * 18) * (drive.mode === 'idle' ? .01 : .025);
     const scale = clamp(w / 620, .62, 1.12);

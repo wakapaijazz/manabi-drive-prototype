@@ -49,12 +49,17 @@
   };
   let swipeStart = null;
   let audioContext = null;
+  const audio = {
+    master: null, engineOutput: null, engineFilter: null,
+    engineOsc: null, engineHarmonic: null, engineSub: null,
+    engineNoise: null, engineNoiseGain: null, noiseBuffer: null
+  };
   let advanceTimer = null;
   const drive = {
     ctx: null, width: 0, height: 0, dpr: 1, lastTime: 0, frame: 0,
     distance: 0, speed: .12, lane: 0, targetLane: 0,
     mode: 'idle', phase: 'cruise', turnSide: 0, turnProgress: 0, shake: 0, flash: 0,
-    choiceCount: 2, isBoss: false, boost: 0, particles: []
+    choiceCount: 2, isBoss: false, selectedChoice: -1, boost: 0, particles: []
   };
 
   function saveLocal(key, value) {
@@ -251,12 +256,14 @@
     drive.boost = 0;
     drive.choiceCount = 2;
     drive.isBoss = false;
+    drive.selectedChoice = -1;
     drive.particles.length = 0;
   }
 
   function startDriveAnimation(which, right, choiceCount = 2) {
     drive.choiceCount = choiceCount;
     drive.isBoss = choiceCount > 2;
+    drive.selectedChoice = which;
     drive.turnSide = choiceCount === 2 ? (which === 0 ? -1 : 1) : ((which / (choiceCount - 1)) * 2 - 1);
     const side = drive.turnSide < -.18 ? 'left' : drive.turnSide > .18 ? 'right' : '';
     el.world.classList.add('is-driving', right ? 'is-correct-route' : 'is-wrong-route');
@@ -326,6 +333,7 @@
       particle.life -= dt;
     }
     drive.particles = drive.particles.filter(particle => particle.life > 0);
+    updateEngineSound();
   }
 
   function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
@@ -492,18 +500,58 @@
       }
     }
 
+    drawBranchRoads(ctx, w, h);
     if (drive.isBoss) drawBossIntersection(ctx, w, h);
-    else {
-      const fork = roadPoint(.1);
-      ctx.strokeStyle = '#fff4c4cc';
-      ctx.lineWidth = 4;
-      for (const side of [-1, 1]) {
-        ctx.beginPath();
-        ctx.moveTo(fork.center + side * fork.width * .06, fork.y);
-        ctx.lineTo(w / 2 + side * w * .36, h * .42);
-        ctx.stroke();
-      }
+  }
+
+  function drawBranchRoads(ctx, w, h) {
+    const count = Math.max(2, drive.choiceCount);
+    const junction = roadPoint(.28);
+    const branchY = h * .37;
+    const nearSpread = drive.isBoss ? .72 : .62;
+    ctx.save();
+    ctx.lineJoin = 'round';
+    for (let i = 0; i < count; i++) {
+      const ratio = i / (count - 1);
+      const targetX = w * (.08 + ratio * .84);
+      const nearCenter = junction.center + (ratio - .5) * junction.width * nearSpread;
+      const nearHalf = Math.max(8, junction.width / (count * 2.45));
+      const farHalf = Math.max(4, w * .025);
+      const highlighted = drive.selectedChoice === i;
+      ctx.fillStyle = highlighted ? '#485f72' : '#334a5d';
+      ctx.beginPath();
+      ctx.moveTo(nearCenter - nearHalf, junction.y + 5);
+      ctx.lineTo(nearCenter + nearHalf, junction.y + 5);
+      ctx.lineTo(targetX + farHalf, branchY);
+      ctx.lineTo(targetX - farHalf, branchY);
+      ctx.closePath(); ctx.fill();
+
+      ctx.strokeStyle = highlighted ? '#fff0aa' : '#d8d8b6cc';
+      ctx.lineWidth = highlighted ? 3 : 1.5;
+      ctx.beginPath();
+      ctx.moveTo(nearCenter - nearHalf, junction.y + 5);
+      ctx.lineTo(targetX - farHalf, branchY);
+      ctx.moveTo(nearCenter + nearHalf, junction.y + 5);
+      ctx.lineTo(targetX + farHalf, branchY);
+      ctx.stroke();
+
+      ctx.save();
+      ctx.setLineDash([8, 11]);
+      ctx.strokeStyle = highlighted ? '#ffffffdd' : '#c7d8d5a0';
+      ctx.lineWidth = highlighted ? 2.2 : 1;
+      ctx.beginPath();
+      ctx.moveTo(nearCenter, junction.y);
+      ctx.quadraticCurveTo((nearCenter + targetX) / 2, h * .43, targetX, branchY + 2);
+      ctx.stroke();
+      ctx.restore();
     }
+    ctx.fillStyle = '#f7dfa0';
+    ctx.beginPath();
+    ctx.moveTo(junction.center - junction.width * .05, junction.y + 7);
+    ctx.lineTo(junction.center + junction.width * .05, junction.y + 7);
+    ctx.lineTo(junction.center + 3, junction.y - 18);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
   }
 
   function drawBossIntersection(ctx, w, h) {
@@ -523,19 +571,6 @@
     for (let x = junction.center - crossWidth * .8; x < junction.center + crossWidth * .8; x += 32) {
       ctx.beginPath(); ctx.moveTo(x, crossY - 7); ctx.lineTo(x + 8, crossY + 16); ctx.stroke();
     }
-    const branchStart = roadPoint(.1);
-    const branchY = h * .37;
-    ctx.shadowColor = '#fff2a5'; ctx.shadowBlur = 10;
-    ctx.strokeStyle = '#fff0a8'; ctx.lineWidth = 3;
-    for (let i = 0; i < drive.choiceCount; i++) {
-      const ratio = drive.choiceCount === 1 ? .5 : i / (drive.choiceCount - 1);
-      const targetX = w * (.14 + ratio * .72);
-      ctx.beginPath();
-      ctx.moveTo(branchStart.center + (ratio - .5) * branchStart.width * .6, branchStart.y);
-      ctx.quadraticCurveTo(w / 2 + (targetX - w / 2) * .35, h * .4, targetX, branchY);
-      ctx.stroke();
-    }
-    ctx.shadowBlur = 0;
     ctx.fillStyle = '#eaffff';
     ctx.fillRect(w * .2, h * .31, w * .6, 5);
     ctx.fillStyle = '#ffcf5c';
@@ -782,27 +817,159 @@
     }
   }
 
-  function playFeedbackSound(correct) {
-    if (!state.sound) return;
+  function getAudioContext() {
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) return;
-      if (!audioContext) audioContext = new Ctx();
-      if (audioContext.state === 'suspended') audioContext.resume();
-      const now = audioContext.currentTime;
-      const notes = correct ? [523.25, 659.25, 783.99] : [392, 349.23];
-      for (let i=0; i<notes.length; i++) {
-        const oscillator = audioContext.createOscillator();
-        const volume = audioContext.createGain();
-        oscillator.type = 'sine';
-        oscillator.frequency.value = notes[i];
-        volume.gain.setValueAtTime(.0001, now + i*.105);
-        volume.gain.exponentialRampToValueAtTime(.07, now + i*.105 + .025);
-        volume.gain.exponentialRampToValueAtTime(.0001, now + i*.105 + .2);
-        oscillator.connect(volume); volume.connect(audioContext.destination);
-        oscillator.start(now + i*.105);
-        oscillator.stop(now + i*.105 + .21);
+      if (!Ctx) return null;
+      if (!audioContext) {
+        audioContext = new Ctx();
+        audio.master = audioContext.createGain();
+        audio.master.gain.value = .55;
+        audio.master.connect(audioContext.destination);
       }
+      if (audioContext.state === 'suspended') audioContext.resume();
+      return audioContext;
+    } catch (_) { return null; }
+  }
+
+  function getNoiseBuffer(ctx) {
+    if (audio.noiseBuffer) return audio.noiseBuffer;
+    const length = Math.floor(ctx.sampleRate * .9);
+    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < length; i++) data[i] = (Math.random() * 2 - 1) * .45;
+    audio.noiseBuffer = buffer;
+    return buffer;
+  }
+
+  function startEngineSound() {
+    if (!state.sound) return null;
+    const ctx = getAudioContext();
+    if (!ctx) return null;
+    if (audio.engineOsc) {
+      audio.engineOutput.gain.setTargetAtTime(.035, ctx.currentTime, .08);
+      return ctx;
+    }
+
+    const mixer = ctx.createGain();
+    mixer.gain.value = .8;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 430;
+    filter.Q.value = .9;
+    const output = ctx.createGain();
+    output.gain.value = .0001;
+    mixer.connect(filter); filter.connect(output); output.connect(audio.master);
+
+    const osc = ctx.createOscillator();
+    const oscGain = ctx.createGain();
+    osc.type = 'sawtooth'; osc.frequency.value = 58; oscGain.gain.value = .16;
+    osc.connect(oscGain); oscGain.connect(mixer);
+
+    const harmonic = ctx.createOscillator();
+    const harmonicGain = ctx.createGain();
+    harmonic.type = 'triangle'; harmonic.frequency.value = 116; harmonicGain.gain.value = .1;
+    harmonic.connect(harmonicGain); harmonicGain.connect(mixer);
+
+    const sub = ctx.createOscillator();
+    const subGain = ctx.createGain();
+    sub.type = 'sine'; sub.frequency.value = 29; subGain.gain.value = .24;
+    sub.connect(subGain); subGain.connect(mixer);
+
+    const noise = ctx.createBufferSource();
+    const noiseFilter = ctx.createBiquadFilter();
+    const noiseGain = ctx.createGain();
+    noise.buffer = getNoiseBuffer(ctx); noise.loop = true;
+    noiseFilter.type = 'lowpass'; noiseFilter.frequency.value = 180;
+    noiseGain.gain.value = .035;
+    noise.connect(noiseFilter); noiseFilter.connect(noiseGain); noiseGain.connect(mixer);
+
+    osc.start(); harmonic.start(); sub.start(); noise.start();
+    audio.engineOsc = osc;
+    audio.engineHarmonic = harmonic;
+    audio.engineSub = sub;
+    audio.engineNoise = noise;
+    audio.engineNoiseGain = noiseGain;
+    audio.engineFilter = filter;
+    audio.engineOutput = output;
+    output.gain.setTargetAtTime(.025, ctx.currentTime, .12);
+    return ctx;
+  }
+
+  function updateEngineSound() {
+    if (!audioContext || !audio.engineOsc || !audio.engineOutput) return;
+    const now = audioContext.currentTime;
+    const rpm = 54 + drive.speed * 82 + drive.boost * 120;
+    const volume = state.sound ? .009 + drive.speed * .022 + drive.boost * .035 : .0001;
+    audio.engineOsc.frequency.setTargetAtTime(rpm, now, .035);
+    audio.engineHarmonic.frequency.setTargetAtTime(rpm * 2.01, now, .035);
+    audio.engineSub.frequency.setTargetAtTime(rpm * .5, now, .05);
+    audio.engineFilter.frequency.setTargetAtTime(300 + drive.speed * 330 + drive.boost * 520, now, .07);
+    audio.engineOutput.gain.setTargetAtTime(volume, now, .08);
+  }
+
+  function setSoundEnabled(enabled) {
+    if (enabled) startEngineSound();
+    else if (audioContext && audio.engineOutput) audio.engineOutput.gain.setTargetAtTime(.0001, audioContext.currentTime, .06);
+  }
+
+  function playTone(ctx, frequency, when, duration, type, gain, slideTo = null) {
+    const oscillator = ctx.createOscillator();
+    const volume = ctx.createGain();
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(frequency, when);
+    if (slideTo !== null) oscillator.frequency.exponentialRampToValueAtTime(slideTo, when + duration * .75);
+    volume.gain.setValueAtTime(.0001, when);
+    volume.gain.exponentialRampToValueAtTime(gain, when + .025);
+    volume.gain.exponentialRampToValueAtTime(.0001, when + Math.max(.04, duration - .025));
+    oscillator.connect(volume); volume.connect(audio.master);
+    oscillator.start(when); oscillator.stop(when + duration);
+  }
+
+  function playBoostSound(ctx) {
+    const now = ctx.currentTime;
+    const whoosh = ctx.createBufferSource();
+    const whooshFilter = ctx.createBiquadFilter();
+    const whooshGain = ctx.createGain();
+    whoosh.buffer = getNoiseBuffer(ctx);
+    whooshFilter.type = 'bandpass'; whooshFilter.Q.value = .65;
+    whooshFilter.frequency.setValueAtTime(420, now);
+    whooshFilter.frequency.exponentialRampToValueAtTime(2600, now + .42);
+    whooshGain.gain.setValueAtTime(.0001, now);
+    whooshGain.gain.exponentialRampToValueAtTime(.22, now + .07);
+    whooshGain.gain.exponentialRampToValueAtTime(.0001, now + .82);
+    whoosh.connect(whooshFilter); whooshFilter.connect(whooshGain); whooshGain.connect(audio.master);
+    whoosh.start(now); whoosh.stop(now + .84);
+
+    playTone(ctx, 84, now, .42, 'sawtooth', .18, 210);
+    [392, 523.25, 659.25, 783.99, 1046.5].forEach((note, index) => {
+      playTone(ctx, note, now + .08 + index * .09, .28, index === 4 ? 'sine' : 'triangle', index === 4 ? .16 : .11);
+    });
+    playTone(ctx, 1568, now + .47, .34, 'sine', .08);
+  }
+
+  function playWrongSound(ctx) {
+    const now = ctx.currentTime;
+    playTone(ctx, 210, now, .42, 'square', .11, 78);
+    playTone(ctx, 116, now + .08, .5, 'sawtooth', .08, 62);
+    const thud = ctx.createBufferSource();
+    const thudFilter = ctx.createBiquadFilter();
+    const thudGain = ctx.createGain();
+    thud.buffer = getNoiseBuffer(ctx);
+    thudFilter.type = 'lowpass'; thudFilter.frequency.value = 170;
+    thudGain.gain.setValueAtTime(.13, now);
+    thudGain.gain.exponentialRampToValueAtTime(.0001, now + .34);
+    thud.connect(thudFilter); thudFilter.connect(thudGain); thudGain.connect(audio.master);
+    thud.start(now); thud.stop(now + .36);
+  }
+
+  function playFeedbackSound(correct) {
+    if (!state.sound) return;
+    const ctx = startEngineSound();
+    if (!ctx) return;
+    try {
+      if (correct) playBoostSound(ctx);
+      else playWrongSound(ctx);
     } catch (_) { /* 音が出ない環境でもゲームは続けられます */ }
   }
 
@@ -855,6 +1022,7 @@
   el.speak.addEventListener('click',speakEnglish);
   el.sound.addEventListener('click',()=>{
     state.sound = !state.sound;
+    setSoundEnabled(state.sound);
     el.sound.setAttribute('aria-pressed', String(state.sound));
     el.sound.innerHTML = state.sound ? '🔊 <span>おと ON</span>' : '🔇 <span>おと OFF</span>';
     saveLocal('manabi-drive-sound', state.sound);

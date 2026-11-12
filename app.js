@@ -526,8 +526,12 @@
   function drawRoad(ctx, w, h) {
     const segments = 30;
     for (let i = 0; i < segments; i++) {
-      const far = roadPoint(i / segments);
-      const near = roadPoint((i + 1) / segments);
+      const farDepth = i / segments;
+      const nearDepth = (i + 1) / segments;
+      // 交差点より奥は、一本の道路を描かず、後段の分岐道路だけを描く。
+      if (nearDepth < drive.junctionDepth) continue;
+      const far = roadPoint(Math.max(farDepth, drive.junctionDepth));
+      const near = roadPoint(nearDepth);
       ctx.fillStyle = i % 2 ? '#3b4a5d' : '#43566a';
       ctx.beginPath();
       ctx.moveTo(far.center - far.width / 2, far.y);
@@ -565,19 +569,19 @@
   function drawBranchRoads(ctx, w, h) {
     const count = Math.max(2, drive.choiceCount);
     const junction = roadPoint(drive.junctionDepth);
-    const far = roadPoint(Math.max(.015, drive.junctionDepth - .22));
+    const far = roadPoint(.018);
     const branchY = far.y;
-    const nearSpread = drive.isBoss ? .72 : .62;
+    const nearSpread = drive.isBoss ? 1.02 : .96;
     ctx.save();
     ctx.lineJoin = 'round';
     for (let i = 0; i < count; i++) {
       const ratio = i / (count - 1);
       const targetX = w * (.08 + ratio * .84);
       const nearCenter = junction.center + (ratio - .5) * junction.width * nearSpread;
-      const nearHalf = Math.max(8, junction.width / (count * 2.45));
-      const farHalf = Math.max(3, far.width / (count * 2.3));
+      const nearHalf = Math.max(12, junction.width / (count * 2.15));
+      const farHalf = Math.max(9, w * .03, far.width / (count * 1.7));
       const highlighted = drive.selectedChoice === i;
-      ctx.fillStyle = highlighted ? '#485f72' : '#334a5d';
+      ctx.fillStyle = highlighted ? '#3c607d' : '#1e354a';
       ctx.beginPath();
       ctx.moveTo(nearCenter - nearHalf, junction.y + 5);
       ctx.lineTo(nearCenter + nearHalf, junction.y + 5);
@@ -586,7 +590,7 @@
       ctx.closePath(); ctx.fill();
 
       ctx.strokeStyle = highlighted ? '#fff0aa' : '#d8d8b6cc';
-      ctx.lineWidth = highlighted ? 3 : 1.5;
+      ctx.lineWidth = highlighted ? 4 : 2;
       ctx.beginPath();
       ctx.moveTo(nearCenter - nearHalf, junction.y + 5);
       ctx.lineTo(targetX - farHalf, branchY);
@@ -604,10 +608,27 @@
       ctx.stroke();
       ctx.restore();
     }
+    // 道路の間に草地のゴアを置き、分岐した道路面を明確に分ける。
+    ctx.fillStyle = '#63b975';
+    ctx.strokeStyle = '#f4dda0';
+    ctx.lineWidth = 2.5;
+    for (let i = 0; i < count - 1; i++) {
+      const ratio = (i + .5) / (count - 1);
+      const farX = w * (.08 + ratio * .84);
+      const nearX = junction.center + (ratio - .5) * junction.width * nearSpread;
+      const farHalf = Math.max(5, w * .018);
+      const nearHalf = Math.max(8, junction.width / (count * 1.75));
+      ctx.beginPath();
+      ctx.moveTo(nearX - nearHalf, junction.y + 9);
+      ctx.lineTo(nearX + nearHalf, junction.y + 9);
+      ctx.lineTo(farX + farHalf, branchY);
+      ctx.lineTo(farX - farHalf, branchY);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
     ctx.fillStyle = '#f7dfa0';
     ctx.beginPath();
-    ctx.moveTo(junction.center - junction.width * .05, junction.y + 7);
-    ctx.lineTo(junction.center + junction.width * .05, junction.y + 7);
+    ctx.moveTo(junction.center - junction.width * .09, junction.y + 7);
+    ctx.lineTo(junction.center + junction.width * .09, junction.y + 7);
     ctx.lineTo(junction.center + 3, junction.y - 18);
     ctx.closePath(); ctx.fill();
     ctx.restore();

@@ -327,7 +327,7 @@
     el.world.classList.toggle('is-turning-right', side === 'right');
     drive.mode = right ? 'success' : 'miss';
     drive.phase = right ? 'turn' : 'brake';
-    drive.targetLane = drive.turnSide * (choiceCount > 2 ? .9 : .82);
+    drive.targetLane = drive.turnSide * (choiceCount > 2 ? .72 : .68);
     drive.turnProgress = 0;
     drive.shake = right ? .14 : .65;
     drive.flash = 1;
@@ -379,7 +379,11 @@
       drive.boost += (0 - drive.boost) * Math.min(1, dt * 4);
     }
     drive.distance += drive.speed * dt;
-    drive.lane += (drive.targetLane - drive.lane) * Math.min(1, dt * 4.8);
+    // 車線変更は交差点の曲率に同期させ、選択直後に画面端へ飛ばないようにする。
+    const turnEase = drive.mode === 'idle' ? 0 : drive.turnProgress * drive.turnProgress * (3 - 2 * drive.turnProgress);
+    const laneReach = drive.mode === 'success' ? .72 : .54;
+    const desiredLane = drive.turnSide * laneReach * turnEase;
+    drive.lane += (desiredLane - drive.lane) * Math.min(1, dt * 2.35);
     const junctionSpeed = drive.mode === 'idle' ? .055 : drive.mode === 'success' ? .16 : .09;
     drive.junctionDepth = Math.min(.86, drive.junctionDepth + junctionSpeed * dt);
     drive.shake = Math.max(0, drive.shake - dt * 1.35);
@@ -524,164 +528,212 @@
   }
 
   function drawRoad(ctx, w, h) {
-    const segments = 30;
-    for (let i = 0; i < segments; i++) {
-      const farDepth = i / segments;
-      const nearDepth = (i + 1) / segments;
-      // 幹線は最後まで描き、分岐道路と中央の路肩を重ねてY字に成形する。
-      // 交差点の位置で幹線を切ると、道路片が浮いて見えてしまう。
-      const far = roadPoint(farDepth);
-      const near = roadPoint(nearDepth);
-      ctx.fillStyle = i % 2 ? '#3b4a5d' : '#43566a';
-      ctx.beginPath();
-      ctx.moveTo(far.center - far.width / 2, far.y);
-      ctx.lineTo(far.center + far.width / 2, far.y);
-      ctx.lineTo(near.center + near.width / 2, near.y);
-      ctx.lineTo(near.center - near.width / 2, near.y);
-      ctx.closePath(); ctx.fill();
+    const geometry = buildRoadGeometry(w, h);
 
-      ctx.strokeStyle = i % 2 ? '#e9dca8' : '#fff5c6';
-      ctx.lineWidth = Math.max(1, near.width * .012);
-      ctx.beginPath();
-      ctx.moveTo(far.center - far.width / 2, far.y);
-      ctx.lineTo(near.center - near.width / 2, near.y);
-      ctx.moveTo(far.center + far.width / 2, far.y);
-      ctx.lineTo(near.center + near.width / 2, near.y);
-      ctx.stroke();
+    // 幹線・分岐・交差点の舗装面を一つのパスとして塗る。
+    // パーツごとの色分けや境界線をここで行わないため、継ぎ目が発生しない。
+    ctx.save();
+    ctx.fillStyle = '#30495f';
+    fillContinuousRoad(ctx, geometry);
 
-      const movingDash = Math.floor(drive.distance * 24);
-      if ((i + movingDash) % 3 !== 0) continue;
-      ctx.strokeStyle = '#dfe8e2cc';
-      ctx.lineWidth = Math.max(1, near.width * .016);
-      const laneMarks = drive.isBoss ? [-.5, -.17, .17, .5] : [-.33, .33];
-      for (const lane of laneMarks) {
+    // 路面の質感は、道路の輪郭を分割せず、同じ面の上に薄く重ねる。
+    if (geometry.count === 2) {
+      ctx.save();
+      traceContinuousRoad(ctx, geometry);
+      ctx.clip();
+      for (let i = 2; i < 25; i++) {
+        const depth = i / 25;
+        const point = roadPoint(depth);
+        ctx.strokeStyle = i % 2 ? '#3d5870aa' : '#233c53aa';
+        ctx.lineWidth = Math.max(1, point.width * .012);
         ctx.beginPath();
-        ctx.moveTo(far.center + far.width * lane, far.y);
-        ctx.lineTo(near.center + near.width * lane, near.y);
+        ctx.moveTo(point.center - point.width * .47, point.y);
+        ctx.lineTo(point.center + point.width * .47, point.y);
         ctx.stroke();
       }
+      ctx.restore();
     }
+    ctx.restore();
 
-    drawBranchRoads(ctx, w, h);
+    drawRoadMarkings(ctx, geometry);
     if (drive.isBoss) drawBossIntersection(ctx, w, h);
   }
 
-  function drawBranchRoads(ctx, w, h) {
+  function buildRoadGeometry(w, h) {
     const count = Math.max(2, drive.choiceCount);
     const junction = roadPoint(drive.junctionDepth);
     const far = roadPoint(.018);
     const nearSpread = drive.isBoss ? .55 : .45;
-    const nearWidth = junction.width * (count === 2 ? .56 : count === 3 ? .36 : .28);
-    const farWidth = Math.max(18, w * (count === 2 ? .075 : .055));
+    // 外側の分岐の端が、交差点で幹線の端へ届くように幅を共有する。
+    const nearWidth = junction.width * (drive.isBoss ? .45 : .55);
+    const farWidth = Math.max(16, Math.min(w * .1, far.width * 1.35));
+    const trunkLeft = [];
+    const trunkRight = [];
+    const trunkSamples = 42;
+    for (let i = 0; i <= trunkSamples; i++) {
+      const point = roadPoint(i / trunkSamples);
+      trunkLeft.push({x: point.center - point.width / 2, y: point.y});
+      trunkRight.push({x: point.center + point.width / 2, y: point.y});
+    }
+
     const ribbons = [];
-    ctx.save();
-    ctx.lineJoin = 'round';
     for (let i = 0; i < count; i++) {
       const ratio = i / (count - 1);
       const targetX = w * (.08 + ratio * .84);
       const nearCenter = junction.center + (ratio - .5) * junction.width * nearSpread;
+      const deltaY = junction.y - far.y;
       const path = {
         p0: {x: targetX, y: far.y},
-        p1: {x: targetX + (nearCenter - targetX) * .1, y: far.y + (junction.y - far.y) * .22},
-        p2: {x: nearCenter + (targetX - nearCenter) * .08, y: junction.y - (junction.y - far.y) * .28},
+        // 分岐の根元では接線を横へ向け、急な折れではなく緩いカーブにする。
+        p1: {x: targetX + (nearCenter - targetX) * .22, y: far.y + deltaY * .18},
+        p2: {x: nearCenter + (targetX - nearCenter) * .42, y: junction.y - deltaY * .36},
         p3: {x: nearCenter, y: junction.y}
       };
       ribbons.push({path, highlighted: drive.selectedChoice === i, points: makeBranchRibbon(path, farWidth, nearWidth)});
     }
+    return {count, junction, trunkLeft, trunkRight, ribbons};
+  }
 
-    // 幹線の上に中央の芝生のゴアを置き、分岐の間を自然に空ける。
-    // ゴアは分岐点に向かって細くなるため、道路面が左右に滑らかに分かれる。
-    ctx.fillStyle = '#58b771';
-    for (let i = 0; i < ribbons.length - 1; i++) {
-      const leftInner = ribbons[i].points.right;
-      const rightInner = ribbons[i + 1].points.left;
-      // 手前側まで芝生を伸ばすと、幹線との接続が隠れてしまうため、奥側だけにする。
-      const goreSteps = Math.max(6, Math.floor((leftInner.length - 1) * .58));
-      ctx.beginPath();
-      ctx.moveTo(leftInner[0].x, leftInner[0].y);
-      for (let j = 1; j <= goreSteps; j++) ctx.lineTo(leftInner[j].x, leftInner[j].y);
-      for (let j = goreSteps; j >= 0; j--) ctx.lineTo(rightInner[j].x, rightInner[j].y);
-      ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = '#f7e7a8';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(leftInner[0].x, leftInner[0].y);
-      for (let j = 1; j <= goreSteps; j++) ctx.lineTo(leftInner[j].x, leftInner[j].y);
-      ctx.moveTo(rightInner[0].x, rightInner[0].y);
-      for (let j = 1; j <= goreSteps; j++) ctx.lineTo(rightInner[j].x, rightInner[j].y);
-      ctx.stroke();
-    }
-
-    // まず全ての分岐面を同じアスファルトで塗り、交差点で自然に重ねる。
-    for (const ribbon of ribbons) {
-      const {left, right} = ribbon.points;
-      ctx.fillStyle = ribbon.highlighted ? '#3c607d' : '#1e354a';
-      ctx.beginPath();
-      ctx.moveTo(left[0].x, left[0].y);
-      for (let i = 1; i < left.length; i++) ctx.lineTo(left[i].x, left[i].y);
-      for (let i = right.length - 1; i >= 0; i--) ctx.lineTo(right[i].x, right[i].y);
-      ctx.closePath(); ctx.fill();
-    }
-
-    // 分岐の根元から少し手前までを一枚の舗装面でつなぎ、幹線へ滑らかに戻す。
-    // これがないと、分岐の根元が横一直線に切れたように見えてしまう。
-    const branchStart = ribbons[0].points.left[ribbons[0].points.left.length - 1];
-    const branchEnd = ribbons[ribbons.length - 1].points.right[ribbons[ribbons.length - 1].points.right.length - 1];
-    const join = roadPoint(Math.min(1, drive.junctionDepth + .18));
-    ctx.fillStyle = '#263e52';
+  function traceContinuousRoad(ctx, geometry) {
     ctx.beginPath();
-    ctx.moveTo(branchStart.x, branchStart.y);
-    ctx.quadraticCurveTo(
-      junction.center - junction.width * .16,
-      junction.y + junction.width * .12,
-      join.center - join.width / 2,
-      join.y
+    if (geometry.count === 2) {
+      appendTwoWayForkPath(ctx, geometry);
+      return;
+    }
+    // ボス交差点は中央ハブを共有する一つの路面として塗る。
+    appendRibbonPath(ctx, geometry.trunkLeft, geometry.trunkRight);
+    for (const ribbon of geometry.ribbons) appendRibbonPath(ctx, ribbon.points.left, ribbon.points.right);
+    // 4本の枝の間も同じ舗装ハブで受け止め、芝生の切れ込みを交差点の外へ出さない。
+    const nearRoadWidth = geometry.trunkRight[geometry.trunkRight.length - 1].x - geometry.trunkLeft[geometry.trunkLeft.length - 1].x;
+    const hubWidth = Math.max(geometry.junction.width * 1.45, nearRoadWidth);
+    const hubHeight = Math.max(34, geometry.junction.width * .48);
+    ctx.ellipse(
+      geometry.junction.center,
+      geometry.junction.y + hubHeight * .12,
+      hubWidth * .62,
+      hubHeight,
+      0,
+      0,
+      Math.PI * 2
     );
-    ctx.lineTo(join.center + join.width / 2, join.y);
-    ctx.quadraticCurveTo(
-      junction.center + junction.width * .16,
-      junction.y + junction.width * .12,
-      branchEnd.x,
-      branchEnd.y
+    ctx.ellipse(
+      geometry.junction.center,
+      geometry.junction.y + Math.max(8, geometry.junction.width * .045),
+      geometry.junction.width * .58,
+      Math.max(18, geometry.junction.width * .2),
+      0,
+      0,
+      Math.PI * 2
     );
-    ctx.closePath(); ctx.fill();
+  }
 
-    // トランクと分岐の接続部を丸く重ね、Y字の継ぎ目を滑らかにする。
-    ctx.fillStyle = '#263e52';
+  function fillContinuousRoad(ctx, geometry) {
+    if (geometry.count === 2) {
+      traceContinuousRoad(ctx, geometry);
+      ctx.fill();
+      return;
+    }
+
+    // ボス交差点はサブパスを一括で塗らず、同じ色で順に塗る。
+    // Canvasの巻き方向による穴を防ぎ、中央ハブまで完全な舗装面にする。
+    ctx.beginPath();
+    appendRibbonPath(ctx, geometry.trunkLeft, geometry.trunkRight);
+    ctx.fill();
+    for (const ribbon of geometry.ribbons) {
+      ctx.beginPath();
+      appendRibbonPath(ctx, ribbon.points.left, ribbon.points.right);
+      ctx.fill();
+    }
+    const nearRoadWidth = geometry.trunkRight[geometry.trunkRight.length - 1].x - geometry.trunkLeft[geometry.trunkLeft.length - 1].x;
+    const hubWidth = Math.max(geometry.junction.width * 1.45, nearRoadWidth);
+    const hubHeight = Math.max(34, geometry.junction.width * .48);
     ctx.beginPath();
     ctx.ellipse(
-      junction.center,
-      junction.y + Math.max(8, junction.width * .055),
-      junction.width * .5,
-      Math.max(18, junction.width * .16),
+      geometry.junction.center,
+      geometry.junction.y + hubHeight * .12,
+      hubWidth * .62,
+      hubHeight,
       0,
       0,
       Math.PI * 2
     );
     ctx.fill();
+  }
 
-    // 外周だけを縁取り、内側は白線で車線として見せる。
+  function appendTwoWayForkPath(ctx, geometry) {
+    const start = Math.max(0, Math.floor(drive.junctionDepth * (geometry.trunkLeft.length - 1)));
+    const leftBranch = geometry.ribbons[0].points;
+    const rightBranch = geometry.ribbons[1].points;
+    const leftOuter = leftBranch.left;
+    const leftInner = leftBranch.right;
+    const rightInner = rightBranch.left;
+    const rightOuter = rightBranch.right;
+
+    // 手前の幹線左端から、左枝の外周、中央の接続点、右枝の外周を
+    // 一筆でたどって幹線右端へ戻る。内部に別の道路パーツを重ねない。
+    ctx.moveTo(geometry.trunkLeft[geometry.trunkLeft.length - 1].x, geometry.trunkLeft[geometry.trunkLeft.length - 1].y);
+    for (let i = geometry.trunkLeft.length - 2; i >= start; i--) ctx.lineTo(geometry.trunkLeft[i].x, geometry.trunkLeft[i].y);
+    for (let i = leftOuter.length - 1; i >= 0; i--) ctx.lineTo(leftOuter[i].x, leftOuter[i].y);
+    for (let i = 0; i < leftInner.length; i++) ctx.lineTo(leftInner[i].x, leftInner[i].y);
+    ctx.lineTo(geometry.junction.center, geometry.junction.y + Math.max(4, geometry.junction.width * .035));
+    for (let i = rightInner.length - 1; i >= 0; i--) ctx.lineTo(rightInner[i].x, rightInner[i].y);
+    for (let i = 0; i < rightOuter.length; i++) ctx.lineTo(rightOuter[i].x, rightOuter[i].y);
+    for (let i = start + 1; i < geometry.trunkRight.length; i++) ctx.lineTo(geometry.trunkRight[i].x, geometry.trunkRight[i].y);
+    ctx.closePath();
+  }
+
+  function appendRibbonPath(ctx, left, right) {
+    ctx.moveTo(left[0].x, left[0].y);
+    for (let i = 1; i < left.length; i++) ctx.lineTo(left[i].x, left[i].y);
+    for (let i = right.length - 1; i >= 0; i--) ctx.lineTo(right[i].x, right[i].y);
+    ctx.closePath();
+  }
+
+  function drawRoadMarkings(ctx, geometry) {
     ctx.lineCap = 'round';
-    for (let i = 0; i < ribbons.length; i++) {
-      const ribbon = ribbons[i];
-      const {left, right, center} = ribbon.points;
-      const drawEdge = i === 0 ? left : i === ribbons.length - 1 ? right : null;
-      if (drawEdge) {
-        ctx.strokeStyle = '#e7dcae'; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.moveTo(drawEdge[0].x, drawEdge[0].y);
-        for (let j = 1; j < drawEdge.length; j++) ctx.lineTo(drawEdge[j].x, drawEdge[j].y);
-        ctx.stroke();
+    const start = Math.max(0, Math.floor(drive.junctionDepth * (geometry.trunkLeft.length - 1)) - 1);
+    const trunkLeft = geometry.trunkLeft.slice(start);
+    const trunkRight = geometry.trunkRight.slice(start);
+    ctx.strokeStyle = '#f1dfab';
+    ctx.lineWidth = 3;
+    strokePolyline(ctx, trunkLeft);
+    strokePolyline(ctx, trunkRight);
+
+    const outerBranches = [geometry.ribbons[0].points.left, geometry.ribbons[geometry.ribbons.length - 1].points.right];
+    for (const edge of outerBranches) {
+      ctx.strokeStyle = '#e7dcae';
+      ctx.lineWidth = 2.5;
+      strokePolyline(ctx, edge);
+    }
+
+    ctx.save();
+    ctx.setLineDash([10, 13]);
+    ctx.lineWidth = 1.7;
+    ctx.strokeStyle = '#dce8e2c8';
+    const laneMarks = drive.isBoss ? [-.5, -.17, .17, .5] : [-.33, .33];
+    for (const lane of laneMarks) {
+      const points = [];
+      for (let i = start; i < geometry.trunkLeft.length; i++) {
+        const depth = i / (geometry.trunkLeft.length - 1);
+        const point = roadPoint(depth);
+        points.push({x: point.center + point.width * lane, y: point.y});
       }
-      ctx.save();
-      ctx.setLineDash([10, 13]);
-      ctx.strokeStyle = ribbon.highlighted ? '#ffffffdd' : '#dce8e2b8';
-      ctx.lineWidth = ribbon.highlighted ? 2.4 : 1.4;
-      ctx.beginPath(); ctx.moveTo(center[0].x, center[0].y);
-      for (let j = 1; j < center.length; j++) ctx.lineTo(center[j].x, center[j].y);
-      ctx.stroke();
-      ctx.restore();
+      strokePolyline(ctx, points);
+    }
+    for (const ribbon of geometry.ribbons) {
+      ctx.strokeStyle = ribbon.highlighted ? '#ffffffee' : '#dce8e2c0';
+      ctx.lineWidth = ribbon.highlighted ? 2.5 : 1.5;
+      strokePolyline(ctx, ribbon.points.center);
     }
     ctx.restore();
+  }
+
+  function strokePolyline(ctx, points) {
+    if (!points || points.length < 2) return;
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+    ctx.stroke();
   }
 
   function cubicPoint(path, t) {

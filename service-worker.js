@@ -1,4 +1,4 @@
-const CACHE = 'manabi-drive-v3';
+const CACHE = 'manabi-drive-v4';
 const RESOURCES = [
   './', './index.html', './style.css', './questions.js', './app.js',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'
@@ -13,5 +13,17 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
+  const appShell = event.request.mode === 'navigate'
+    || ['script', 'style'].includes(event.request.destination);
+  if (appShell) {
+    event.respondWith(
+      fetch(event.request).then((response) => {
+        const copy = response.clone();
+        caches.open(CACHE).then(cache => cache.put(event.request, copy)).catch(() => {});
+        return response;
+      }).catch(() => caches.match(event.request).then(cached => cached || caches.match('./index.html')))
+    );
+    return;
+  }
   event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request)));
 });

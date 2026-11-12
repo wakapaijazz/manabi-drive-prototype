@@ -528,9 +528,9 @@
     for (let i = 0; i < segments; i++) {
       const farDepth = i / segments;
       const nearDepth = (i + 1) / segments;
-      // 交差点より奥は、一本の道路を描かず、後段の分岐道路だけを描く。
-      if (nearDepth < drive.junctionDepth) continue;
-      const far = roadPoint(Math.max(farDepth, drive.junctionDepth));
+      // 幹線は最後まで描き、分岐道路と中央の路肩を重ねてY字に成形する。
+      // 交差点の位置で幹線を切ると、道路片が浮いて見えてしまう。
+      const far = roadPoint(farDepth);
       const near = roadPoint(nearDepth);
       ctx.fillStyle = i % 2 ? '#3b4a5d' : '#43566a';
       ctx.beginPath();
@@ -570,68 +570,149 @@
     const count = Math.max(2, drive.choiceCount);
     const junction = roadPoint(drive.junctionDepth);
     const far = roadPoint(.018);
-    const branchY = far.y;
-    const nearSpread = drive.isBoss ? 1.02 : .96;
+    const nearSpread = drive.isBoss ? .55 : .45;
+    const nearWidth = junction.width * (count === 2 ? .56 : count === 3 ? .36 : .28);
+    const farWidth = Math.max(18, w * (count === 2 ? .075 : .055));
+    const ribbons = [];
     ctx.save();
     ctx.lineJoin = 'round';
     for (let i = 0; i < count; i++) {
       const ratio = i / (count - 1);
       const targetX = w * (.08 + ratio * .84);
       const nearCenter = junction.center + (ratio - .5) * junction.width * nearSpread;
-      const nearHalf = Math.max(12, junction.width / (count * 2.15));
-      const farHalf = Math.max(9, w * .03, far.width / (count * 1.7));
-      const highlighted = drive.selectedChoice === i;
-      ctx.fillStyle = highlighted ? '#3c607d' : '#1e354a';
+      const path = {
+        p0: {x: targetX, y: far.y},
+        p1: {x: targetX + (nearCenter - targetX) * .1, y: far.y + (junction.y - far.y) * .22},
+        p2: {x: nearCenter + (targetX - nearCenter) * .08, y: junction.y - (junction.y - far.y) * .28},
+        p3: {x: nearCenter, y: junction.y}
+      };
+      ribbons.push({path, highlighted: drive.selectedChoice === i, points: makeBranchRibbon(path, farWidth, nearWidth)});
+    }
+
+    // 幹線の上に中央の芝生のゴアを置き、分岐の間を自然に空ける。
+    // ゴアは分岐点に向かって細くなるため、道路面が左右に滑らかに分かれる。
+    ctx.fillStyle = '#58b771';
+    for (let i = 0; i < ribbons.length - 1; i++) {
+      const leftInner = ribbons[i].points.right;
+      const rightInner = ribbons[i + 1].points.left;
+      // 手前側まで芝生を伸ばすと、幹線との接続が隠れてしまうため、奥側だけにする。
+      const goreSteps = Math.max(6, Math.floor((leftInner.length - 1) * .58));
       ctx.beginPath();
-      ctx.moveTo(nearCenter - nearHalf, junction.y + 5);
-      ctx.lineTo(nearCenter + nearHalf, junction.y + 5);
-      ctx.lineTo(targetX + farHalf, branchY);
-      ctx.lineTo(targetX - farHalf, branchY);
+      ctx.moveTo(leftInner[0].x, leftInner[0].y);
+      for (let j = 1; j <= goreSteps; j++) ctx.lineTo(leftInner[j].x, leftInner[j].y);
+      for (let j = goreSteps; j >= 0; j--) ctx.lineTo(rightInner[j].x, rightInner[j].y);
       ctx.closePath(); ctx.fill();
-
-      ctx.strokeStyle = highlighted ? '#fff0aa' : '#d8d8b6cc';
-      ctx.lineWidth = highlighted ? 4 : 2;
+      ctx.strokeStyle = '#f7e7a8';
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(nearCenter - nearHalf, junction.y + 5);
-      ctx.lineTo(targetX - farHalf, branchY);
-      ctx.moveTo(nearCenter + nearHalf, junction.y + 5);
-      ctx.lineTo(targetX + farHalf, branchY);
+      ctx.moveTo(leftInner[0].x, leftInner[0].y);
+      for (let j = 1; j <= goreSteps; j++) ctx.lineTo(leftInner[j].x, leftInner[j].y);
+      ctx.moveTo(rightInner[0].x, rightInner[0].y);
+      for (let j = 1; j <= goreSteps; j++) ctx.lineTo(rightInner[j].x, rightInner[j].y);
       ctx.stroke();
+    }
 
-      ctx.save();
-      ctx.setLineDash([8, 11]);
-      ctx.strokeStyle = highlighted ? '#ffffffdd' : '#c7d8d5a0';
-      ctx.lineWidth = highlighted ? 2.2 : 1;
+    // まず全ての分岐面を同じアスファルトで塗り、交差点で自然に重ねる。
+    for (const ribbon of ribbons) {
+      const {left, right} = ribbon.points;
+      ctx.fillStyle = ribbon.highlighted ? '#3c607d' : '#1e354a';
       ctx.beginPath();
-      ctx.moveTo(nearCenter, junction.y);
-      ctx.quadraticCurveTo((nearCenter + targetX) / 2, (junction.y + branchY) / 2, targetX, branchY + 2);
+      ctx.moveTo(left[0].x, left[0].y);
+      for (let i = 1; i < left.length; i++) ctx.lineTo(left[i].x, left[i].y);
+      for (let i = right.length - 1; i >= 0; i--) ctx.lineTo(right[i].x, right[i].y);
+      ctx.closePath(); ctx.fill();
+    }
+
+    // 分岐の根元から少し手前までを一枚の舗装面でつなぎ、幹線へ滑らかに戻す。
+    // これがないと、分岐の根元が横一直線に切れたように見えてしまう。
+    const branchStart = ribbons[0].points.left[ribbons[0].points.left.length - 1];
+    const branchEnd = ribbons[ribbons.length - 1].points.right[ribbons[ribbons.length - 1].points.right.length - 1];
+    const join = roadPoint(Math.min(1, drive.junctionDepth + .18));
+    ctx.fillStyle = '#263e52';
+    ctx.beginPath();
+    ctx.moveTo(branchStart.x, branchStart.y);
+    ctx.quadraticCurveTo(
+      junction.center - junction.width * .16,
+      junction.y + junction.width * .12,
+      join.center - join.width / 2,
+      join.y
+    );
+    ctx.lineTo(join.center + join.width / 2, join.y);
+    ctx.quadraticCurveTo(
+      junction.center + junction.width * .16,
+      junction.y + junction.width * .12,
+      branchEnd.x,
+      branchEnd.y
+    );
+    ctx.closePath(); ctx.fill();
+
+    // トランクと分岐の接続部を丸く重ね、Y字の継ぎ目を滑らかにする。
+    ctx.fillStyle = '#263e52';
+    ctx.beginPath();
+    ctx.ellipse(
+      junction.center,
+      junction.y + Math.max(8, junction.width * .055),
+      junction.width * .5,
+      Math.max(18, junction.width * .16),
+      0,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+
+    // 外周だけを縁取り、内側は白線で車線として見せる。
+    ctx.lineCap = 'round';
+    for (let i = 0; i < ribbons.length; i++) {
+      const ribbon = ribbons[i];
+      const {left, right, center} = ribbon.points;
+      const drawEdge = i === 0 ? left : i === ribbons.length - 1 ? right : null;
+      if (drawEdge) {
+        ctx.strokeStyle = '#e7dcae'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(drawEdge[0].x, drawEdge[0].y);
+        for (let j = 1; j < drawEdge.length; j++) ctx.lineTo(drawEdge[j].x, drawEdge[j].y);
+        ctx.stroke();
+      }
+      ctx.save();
+      ctx.setLineDash([10, 13]);
+      ctx.strokeStyle = ribbon.highlighted ? '#ffffffdd' : '#dce8e2b8';
+      ctx.lineWidth = ribbon.highlighted ? 2.4 : 1.4;
+      ctx.beginPath(); ctx.moveTo(center[0].x, center[0].y);
+      for (let j = 1; j < center.length; j++) ctx.lineTo(center[j].x, center[j].y);
       ctx.stroke();
       ctx.restore();
     }
-    // 道路の間に草地のゴアを置き、分岐した道路面を明確に分ける。
-    ctx.fillStyle = '#63b975';
-    ctx.strokeStyle = '#f4dda0';
-    ctx.lineWidth = 2.5;
-    for (let i = 0; i < count - 1; i++) {
-      const ratio = (i + .5) / (count - 1);
-      const farX = w * (.08 + ratio * .84);
-      const nearX = junction.center + (ratio - .5) * junction.width * nearSpread;
-      const farHalf = Math.max(5, w * .018);
-      const nearHalf = Math.max(8, junction.width / (count * 1.75));
-      ctx.beginPath();
-      ctx.moveTo(nearX - nearHalf, junction.y + 9);
-      ctx.lineTo(nearX + nearHalf, junction.y + 9);
-      ctx.lineTo(farX + farHalf, branchY);
-      ctx.lineTo(farX - farHalf, branchY);
-      ctx.closePath(); ctx.fill(); ctx.stroke();
-    }
-    ctx.fillStyle = '#f7dfa0';
-    ctx.beginPath();
-    ctx.moveTo(junction.center - junction.width * .09, junction.y + 7);
-    ctx.lineTo(junction.center + junction.width * .09, junction.y + 7);
-    ctx.lineTo(junction.center + 3, junction.y - 18);
-    ctx.closePath(); ctx.fill();
     ctx.restore();
+  }
+
+  function cubicPoint(path, t) {
+    const u = 1 - t;
+    return {
+      x: u * u * u * path.p0.x + 3 * u * u * t * path.p1.x + 3 * u * t * t * path.p2.x + t * t * t * path.p3.x,
+      y: u * u * u * path.p0.y + 3 * u * u * t * path.p1.y + 3 * u * t * t * path.p2.y + t * t * t * path.p3.y
+    };
+  }
+
+  function makeBranchRibbon(path, farWidth, nearWidth) {
+    const left = [];
+    const right = [];
+    const center = [];
+    const steps = 28;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const point = cubicPoint(path, t);
+      const previous = cubicPoint(path, Math.max(0, t - .01));
+      const next = cubicPoint(path, Math.min(1, t + .01));
+      const dx = next.x - previous.x;
+      const dy = next.y - previous.y;
+      const length = Math.max(.001, Math.hypot(dx, dy));
+      const half = (farWidth + (nearWidth - farWidth) * t) / 2;
+      const nx = -dy / length;
+      const ny = dx / length;
+      center.push(point);
+      left.push({x: point.x + nx * half, y: point.y + ny * half});
+      right.push({x: point.x - nx * half, y: point.y - ny * half});
+    }
+    return {left, right, center};
   }
 
   function drawBossIntersection(ctx, w, h) {

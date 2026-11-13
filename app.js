@@ -18,8 +18,9 @@
     kanji: [
       ['mix', 'なんでも ミックス'],
       ['reading', 'かんじの よみ'],
-      ['writing', 'かんじを えらぶ（かき）'],
-      ['compound', 'じゅくごの よみ']
+      ['writing', 'かんじを かく'],
+      ['compound', 'じゅくごの よみ'],
+      ['sentence', 'ぶんしょうで かんじ']
     ],
     english: [
       ['mix', 'なんでも ミックス'],
@@ -33,6 +34,7 @@
     topic: $('topicSelect'), grade: $('gradeSelect'), gradeWrap: $('gradeWrap'),
     qKind: $('questionKind'), qGrade: $('questionGrade'), qText: $('questionText'), visual: $('questionVisual'),
     choices: [], roadChoices: $('roadChoices'),
+    vehicleChoices: $('vehicleChoices'), vehicleProgress: $('vehicleProgress'),
     drives: [$('goLeft'), $('goRight')], controlsRow: document.querySelector('.controls-row'), controlHint: document.querySelector('.control-hint'),
     world: $('world'), canvas: $('driveCanvas'), bossBadge: $('bossBadge'), worldTip: $('worldTip'),
     answerTimer: $('answerTimer'), answerTime: $('answerTime'), answerTimerFill: $('answerTimerFill'),
@@ -47,8 +49,15 @@
   let state = {
     subject: 'math', topic: 'mix', grade: 3, number: 1, question: null,
     coins: 0, streak: 0, correct: 0, wrong: 0, locked: false,
-    mistakes: [], recent: [], sound: true
+    mistakes: [], recent: [], sound: true, vehicleId: 'blue-racer'
   };
+  const VEHICLES = [
+    {id:'blue-racer', name:'ブルー・レーサー', icon:'🏎️', style:'racer', unlockStreak:0, swatch:'#1477d4', body:0x1477d4, trim:0x122840, glass:0x60c9e6},
+    {id:'red-racer', name:'レッド・レーサー', icon:'🏎️', style:'racer', unlockStreak:3, swatch:'#e34848', body:0xe34848, trim:0x441b2a, glass:0x7fd7e8},
+    {id:'white-bike', name:'ホワイト・バイク', icon:'🏍️', style:'bike', unlockStreak:6, swatch:'#f5f7fb', body:0xf5f7fb, trim:0x273b56, glass:0x8dd9e8},
+    {id:'gold-truck', name:'ゴールド・トラック', icon:'🚚', style:'truck', unlockStreak:9, swatch:'#e3ad35', body:0xe3ad35, trim:0x5a3a16, glass:0x81cbe1}
+  ];
+  let unlockedVehicles = new Set(['blue-racer']);
   let swipeStart = null;
   let audioContext = null;
   const audio = {
@@ -93,9 +102,11 @@
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     clearAdvanceTimer();
     clearAnswerTimer();
-    const {subject, topic, grade, sound} = state;
-    state = {subject, topic, grade, sound, number:1, question:null, coins:0, streak:0, correct:0, wrong:0, locked:false, mistakes:[], recent:[]};
+    const {subject, topic, grade, sound, vehicleId} = state;
+    state = {subject, topic, grade, sound, vehicleId, number:1, question:null, coins:0, streak:0, correct:0, wrong:0, locked:false, mistakes:[], recent:[]};
     el.finish.hidden = true;
+    renderVehicleChoices();
+    applySelectedVehicle();
     resetDriveAnimation();
     el.feedback.hidden = true;
     nextQuestion();
@@ -193,6 +204,7 @@
       state.correct++;
       state.streak++;
       state.coins += 10 + (state.streak % 3 === 0 ? 5 : 0);
+      advanceVehicleProgression();
       playFeedbackSound(true);
     } else {
       state.wrong++;
@@ -343,6 +355,7 @@
     if (!el.canvas) return;
     try {
       drive.scene = new window.DriveScene(el.canvas);
+      applySelectedVehicle();
       window.addEventListener('resize', () => drive.scene.resize(), {passive: true});
       drive.lastTime = performance.now();
       drive.frame = window.requestAnimationFrame(renderDriveFrame);
@@ -353,6 +366,51 @@
       message.textContent = '3Dの どうろを ひょうじできません。あたらしいブラウザで ためしてね。';
       el.world.append(message);
     }
+  }
+
+  function selectedVehicle() {
+    return VEHICLES.find(vehicle => vehicle.id === state.vehicleId) || VEHICLES[0];
+  }
+
+  function applySelectedVehicle() {
+    if (drive.scene) drive.scene.setVehicle(selectedVehicle());
+  }
+
+  function renderVehicleChoices() {
+    if (!el.vehicleChoices) return;
+    el.vehicleChoices.replaceChildren();
+    for (const vehicle of VEHICLES) {
+      const unlocked = unlockedVehicles.has(vehicle.id) || vehicle.unlockStreak === 0;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `vehicle-choice${state.vehicleId === vehicle.id ? ' is-selected' : ''}${unlocked ? '' : ' is-locked'}`;
+      button.disabled = !unlocked;
+      button.style.setProperty('--vehicle-swatch', vehicle.swatch);
+      button.setAttribute('aria-label', unlocked ? `${vehicle.name}を えらぶ` : `${vehicle.name}は ${vehicle.unlockStreak}れんぞく せいかいで 解放`);
+      button.innerHTML = `<span class="vehicle-icon">${unlocked ? vehicle.icon : '🔒'}</span><strong>${vehicle.name}</strong><small>${unlocked ? (state.vehicleId === vehicle.id ? 'せんたくちゅう' : 'えらべる') : `${vehicle.unlockStreak}れんぞくで 解放`}</small>`;
+      button.addEventListener('click', () => {
+        state.vehicleId = vehicle.id;
+        saveLocal('manabi-drive-vehicle', vehicle.id);
+        applySelectedVehicle();
+        renderVehicleChoices();
+      });
+      el.vehicleChoices.append(button);
+    }
+    const next = VEHICLES.find(vehicle => !unlockedVehicles.has(vehicle.id));
+    el.vehicleProgress.textContent = next ? `${next.unlockStreak}れんぞく せいかいで ${next.name}が なかまになるよ` : 'ぜんぶの くるまを ゲット！';
+  }
+
+  function advanceVehicleProgression() {
+    const unlockedNow = VEHICLES.filter(vehicle => state.streak >= vehicle.unlockStreak);
+    for (const vehicle of unlockedNow) unlockedVehicles.add(vehicle.id);
+    const upgrade = VEHICLES.find(vehicle => vehicle.unlockStreak === state.streak);
+    if (upgrade) {
+      state.vehicleId = upgrade.id;
+      saveLocal('manabi-drive-vehicle', upgrade.id);
+      applySelectedVehicle();
+    }
+    saveLocal('manabi-drive-unlocked', [...unlockedVehicles]);
+    renderVehicleChoices();
   }
 
   function renderDriveFrame(now) {
@@ -430,6 +488,7 @@
     if (v.type === 'blocks') { parent.append(makeBlocks(v.count)); return; }
     if (v.type === 'emoji') { parent.append(makeNode('span','visual-emoji',v.emoji)); return; }
     if (v.type === 'kanji') { parent.append(makeNode('div','visual-kanji',v.word)); return; }
+    if (v.type === 'sentence') { parent.append(makeNode('div','visual-sentence',v.text)); return; }
     if (v.type === 'notebook') { parent.append(makeNode('div','visual-notebook','✏️')); return; }
     if (v.type === 'clock') { parent.append(makeClock(v.h, v.m)); return; }
     if (v.type === 'clock-pair') {
@@ -697,6 +756,12 @@
   }, {passive:true});
   el.world.addEventListener('pointercancel', () => { swipeStart = null; }, {passive:true});
 
+  const savedUnlockedVehicles = readLocal('manabi-drive-unlocked', ['blue-racer']);
+  unlockedVehicles = new Set(Array.isArray(savedUnlockedVehicles) ? savedUnlockedVehicles : ['blue-racer']);
+  unlockedVehicles.add('blue-racer');
+  const savedVehicle = readLocal('manabi-drive-vehicle', 'blue-racer');
+  if (VEHICLES.some(vehicle => vehicle.id === savedVehicle && unlockedVehicles.has(vehicle.id))) state.vehicleId = savedVehicle;
+  renderVehicleChoices();
   state.sound = readLocal('manabi-drive-sound', true);
   el.sound.setAttribute('aria-pressed', String(state.sound));
   el.sound.innerHTML = state.sound ? '🔊 <span>おと ON</span>' : '🔇 <span>おと OFF</span>';

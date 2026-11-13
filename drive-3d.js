@@ -6,6 +6,7 @@
   const G = root.RoadGeometry;
   const clamp = (x, low, high) => Math.max(low, Math.min(high, x));
   const damp = (speed, dt) => 1 - Math.exp(-speed * dt);
+  const DEFAULT_VEHICLE = {id:'blue-racer', style:'racer', body:0x1477d4, trim:0x122840, glass:0x60c9e6};
 
   function makeAsphaltTexture() {
     const canvas = document.createElement('canvas');
@@ -45,6 +46,7 @@
       this.travelSpeed = 0;
       this.boost = 0;
       this.debugTopDown = false;
+      this.vehicle = {...DEFAULT_VEHICLE};
       this.materials = {
         road: new THREE.MeshStandardMaterial({color: 0x465155, map: makeAsphaltTexture(), roughness: .98, side: THREE.DoubleSide}),
         edge: new THREE.MeshBasicMaterial({color: 0xe8d6a3, side: THREE.DoubleSide}),
@@ -57,7 +59,8 @@
         light: new THREE.MeshBasicMaterial({color: 0xff6061})
       };
       this.setupEnvironment();
-      this.createCar();
+      this.applyVehiclePalette(this.vehicle);
+      this.createCar(this.vehicle);
       this.roadGroup = null;
       this.resize();
       this.reset(2);
@@ -108,7 +111,38 @@
       }
     }
 
-    createCar() {
+    applyVehiclePalette(vehicle) {
+      this.materials.blue.color.setHex(vehicle.body ?? DEFAULT_VEHICLE.body);
+      this.materials.trim.color.setHex(vehicle.trim ?? DEFAULT_VEHICLE.trim);
+      this.materials.glass.color.setHex(vehicle.glass ?? DEFAULT_VEHICLE.glass);
+    }
+
+    disposeCar(car) {
+      if (!car) return;
+      car.traverse(object => {
+        if (object.geometry) object.geometry.dispose();
+      });
+    }
+
+    setVehicle(vehicle = DEFAULT_VEHICLE) {
+      const next = {...DEFAULT_VEHICLE, ...vehicle};
+      if (this.car && this.vehicle.id === next.id) return;
+      const position = this.car ? this.car.position.clone() : null;
+      const rotation = this.car ? this.car.rotation.clone() : null;
+      const chassisRotation = this.chassis ? this.chassis.rotation.clone() : null;
+      if (this.car) {
+        this.scene.remove(this.car);
+        this.disposeCar(this.car);
+      }
+      this.vehicle = next;
+      this.applyVehiclePalette(next);
+      this.createCar(next);
+      if (position) this.car.position.copy(position);
+      if (rotation) this.car.rotation.copy(rotation);
+      if (chassisRotation) this.chassis.rotation.copy(chassisRotation);
+    }
+
+    createCar(vehicle = this.vehicle || DEFAULT_VEHICLE) {
       const car = new THREE.Group();
       const chassis = new THREE.Group();
       car.add(chassis);
@@ -117,84 +151,133 @@
       this.wheels = [];
       this.frontPivots = [];
 
-      const shape = new THREE.Shape();
-      shape.moveTo(-.82, -2.05);
-      shape.lineTo(-1.22, -1.25);
-      shape.lineTo(-1.03, .55);
-      shape.quadraticCurveTo(-.65, 2.1, 0, 2.65);
-      shape.quadraticCurveTo(.65, 2.1, 1.03, .55);
-      shape.lineTo(1.22, -1.25);
-      shape.lineTo(.82, -2.05);
-      shape.closePath();
-      const body = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, {depth: .5, bevelEnabled: true, bevelSize: .12, bevelThickness: .1, bevelSegments: 2}), this.materials.blue);
-      body.rotation.x = Math.PI / 2;
-      body.position.y = .82;
-      chassis.add(body);
+      const addWheel = (x, z, radius, front = z > 0) => {
+        const pivot = new THREE.Group();
+        pivot.position.set(x, radius, z);
+        const wheel = new THREE.Group();
+        const tire = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, .42, 18), this.materials.rubber);
+        tire.rotation.z = Math.PI / 2;
+        const hub = new THREE.Mesh(new THREE.CylinderGeometry(radius * .46, radius * .46, .45, 16), this.materials.wheel);
+        hub.rotation.z = Math.PI / 2;
+        wheel.add(tire, hub);
+        pivot.add(wheel);
+        chassis.add(pivot);
+        this.wheels.push(wheel);
+        if (front) this.frontPivots.push(pivot);
+      };
 
-      const noseStripe = new THREE.Mesh(new THREE.BoxGeometry(.18, .03, 1.8), this.materials.marking);
-      noseStripe.position.set(0, .91, 1.35);
-      chassis.add(noseStripe);
-      const cockpit = new THREE.Mesh(new THREE.SphereGeometry(.76, 20, 12), this.materials.glass);
-      cockpit.scale.set(.8, .58, 1.4);
-      cockpit.position.set(0, 1, -.17);
-      chassis.add(cockpit);
-      const cockpitRim = new THREE.Mesh(new THREE.BoxGeometry(1.3, .18, 1.8), this.materials.trim);
-      cockpitRim.position.set(0, .66, -.15);
-      chassis.add(cockpitRim);
-      const rearWing = new THREE.Mesh(new THREE.BoxGeometry(3.35, .13, .5), this.materials.trim);
-      rearWing.position.set(0, 1.12, -1.85);
-      chassis.add(rearWing);
-      const wingTrim = new THREE.Mesh(new THREE.BoxGeometry(3.2, .03, .08), this.materials.glass);
-      wingTrim.position.set(0, 1.2, -2.07);
-      chassis.add(wingTrim);
-      const frontWing = new THREE.Mesh(new THREE.BoxGeometry(2.75, .12, .38), this.materials.trim);
-      frontWing.position.set(0, .37, 2.05);
-      chassis.add(frontWing);
-      for (const side of [-1, 1]) {
-        const sidePod = new THREE.Mesh(new THREE.BoxGeometry(.43, .32, 1.65), this.materials.blue);
-        sidePod.position.set(side * 1.03, .47, -.1);
-        chassis.add(sidePod);
-        const wingSupport = new THREE.Mesh(new THREE.BoxGeometry(.12, .45, .18), this.materials.trim);
-        wingSupport.position.set(side * .65, .9, -1.85);
-        chassis.add(wingSupport);
-      }
-
-      const tireGeometry = new THREE.CylinderGeometry(.49, .49, .48, 18);
-      const hubGeometry = new THREE.CylinderGeometry(.23, .23, .5, 16);
-      for (const z of [-1.45, 1.35]) {
+      if (vehicle.style === 'bike') {
+        const body = new THREE.Mesh(new THREE.SphereGeometry(.76, 18, 12), this.materials.blue);
+        body.scale.set(.57, .42, 1.55);
+        body.position.y = .86;
+        chassis.add(body);
+        const tank = new THREE.Mesh(new THREE.SphereGeometry(.5, 16, 10), this.materials.blue);
+        tank.scale.set(.62, .42, 1.05);
+        tank.position.set(0, 1.02, .35);
+        chassis.add(tank);
+        const windshield = new THREE.Mesh(new THREE.SphereGeometry(.45, 16, 10), this.materials.glass);
+        windshield.scale.set(.52, .58, .8);
+        windshield.position.set(0, 1.18, .72);
+        chassis.add(windshield);
+        const handlebar = new THREE.Mesh(new THREE.BoxGeometry(1.15, .08, .08), this.materials.trim);
+        handlebar.position.set(0, 1.24, 1.12);
+        chassis.add(handlebar);
+        addWheel(0, -1.3, .58, false);
+        addWheel(0, 1.3, .58, true);
+        const headlight = new THREE.Mesh(new THREE.SphereGeometry(.14, 12, 8), this.materials.light);
+        headlight.position.set(0, 1.28, 1.48);
+        chassis.add(headlight);
+      } else if (vehicle.style === 'truck') {
+        const lower = new THREE.Mesh(new THREE.BoxGeometry(2.35, .58, 4.25), this.materials.blue);
+        lower.position.set(0, .63, -.15);
+        chassis.add(lower);
+        const cargo = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.38, 2.18), this.materials.blue);
+        cargo.position.set(0, 1.35, -1.05);
+        chassis.add(cargo);
+        const cab = new THREE.Mesh(new THREE.BoxGeometry(2.08, 1.2, 1.55), this.materials.blue);
+        cab.position.set(0, 1.24, .82);
+        chassis.add(cab);
+        const windshield = new THREE.Mesh(new THREE.BoxGeometry(1.7, .44, .06), this.materials.glass);
+        windshield.position.set(0, 1.42, 1.61);
+        chassis.add(windshield);
+        const roof = new THREE.Mesh(new THREE.BoxGeometry(2.24, .12, 1.72), this.materials.trim);
+        roof.position.set(0, 1.91, .72);
+        chassis.add(roof);
+        const stripe = new THREE.Mesh(new THREE.BoxGeometry(2.24, .12, .08), this.materials.marking);
+        stripe.position.set(0, 1.48, -.2);
+        chassis.add(stripe);
         for (const side of [-1, 1]) {
-          const pivot = new THREE.Group();
-          pivot.position.set(side * 1.12, .49, z);
-          const wheel = new THREE.Group();
-          const tire = new THREE.Mesh(tireGeometry, this.materials.rubber);
-          tire.rotation.z = Math.PI / 2;
-          const hub = new THREE.Mesh(hubGeometry, this.materials.wheel);
-          hub.rotation.z = Math.PI / 2;
-          wheel.add(tire, hub);
-          pivot.add(wheel);
-          chassis.add(pivot);
-          this.wheels.push(wheel);
-          if (z > 0) this.frontPivots.push(pivot);
+          addWheel(side * 1.17, -1.32, .55, false);
+          addWheel(side * 1.17, .92, .55, true);
         }
-      }
-      for (const x of [-.56, .56]) {
-        const tailLight = new THREE.Mesh(new THREE.BoxGeometry(.38, .12, .08), this.materials.light);
-        tailLight.position.set(x, .68, -2.12);
-        chassis.add(tailLight);
+        for (const x of [-.62, .62]) {
+          const tailLight = new THREE.Mesh(new THREE.BoxGeometry(.38, .14, .08), this.materials.light);
+          tailLight.position.set(x, .84, -2.31);
+          chassis.add(tailLight);
+        }
+      } else {
+        const shape = new THREE.Shape();
+        shape.moveTo(-.82, -2.05);
+        shape.lineTo(-1.22, -1.25);
+        shape.lineTo(-1.03, .55);
+        shape.quadraticCurveTo(-.65, 2.1, 0, 2.65);
+        shape.quadraticCurveTo(.65, 2.1, 1.03, .55);
+        shape.lineTo(1.22, -1.25);
+        shape.lineTo(.82, -2.05);
+        shape.closePath();
+        const body = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, {depth: .5, bevelEnabled: true, bevelSize: .12, bevelThickness: .1, bevelSegments: 2}), this.materials.blue);
+        body.rotation.x = Math.PI / 2;
+        body.position.y = .82;
+        chassis.add(body);
+        const noseStripe = new THREE.Mesh(new THREE.BoxGeometry(.18, .03, 1.8), this.materials.marking);
+        noseStripe.position.set(0, .91, 1.35);
+        chassis.add(noseStripe);
+        const cockpit = new THREE.Mesh(new THREE.SphereGeometry(.76, 20, 12), this.materials.glass);
+        cockpit.scale.set(.8, .58, 1.4);
+        cockpit.position.set(0, 1, -.17);
+        chassis.add(cockpit);
+        const cockpitRim = new THREE.Mesh(new THREE.BoxGeometry(1.3, .18, 1.8), this.materials.trim);
+        cockpitRim.position.set(0, .66, -.15);
+        chassis.add(cockpitRim);
+        const rearWing = new THREE.Mesh(new THREE.BoxGeometry(3.35, .13, .5), this.materials.trim);
+        rearWing.position.set(0, 1.12, -1.85);
+        chassis.add(rearWing);
+        const wingTrim = new THREE.Mesh(new THREE.BoxGeometry(3.2, .03, .08), this.materials.glass);
+        wingTrim.position.set(0, 1.2, -2.07);
+        chassis.add(wingTrim);
+        const frontWing = new THREE.Mesh(new THREE.BoxGeometry(2.75, .12, .38), this.materials.trim);
+        frontWing.position.set(0, .37, 2.05);
+        chassis.add(frontWing);
+        for (const side of [-1, 1]) {
+          const sidePod = new THREE.Mesh(new THREE.BoxGeometry(.43, .32, 1.65), this.materials.blue);
+          sidePod.position.set(side * 1.03, .47, -.1);
+          chassis.add(sidePod);
+          const wingSupport = new THREE.Mesh(new THREE.BoxGeometry(.12, .45, .18), this.materials.trim);
+          wingSupport.position.set(side * .65, .9, -1.85);
+          chassis.add(wingSupport);
+          addWheel(side * 1.12, -1.45, .49, false);
+          addWheel(side * 1.12, 1.35, .49, true);
+        }
+        for (const x of [-.56, .56]) {
+          const tailLight = new THREE.Mesh(new THREE.BoxGeometry(.38, .12, .08), this.materials.light);
+          tailLight.position.set(x, .68, -2.12);
+          chassis.add(tailLight);
+        }
       }
       this.exhausts = [];
       const flameMaterial = new THREE.MeshBasicMaterial({color: 0x78eaff, transparent: true, opacity: .85, depthWrite: false});
-      for (const x of [-.48, .48]) {
+      const exhaustPositions = vehicle.style === 'bike' ? [0] : [-.48, .48];
+      for (const x of exhaustPositions) {
         const flame = new THREE.Mesh(new THREE.ConeGeometry(.2, 1.4, 9), flameMaterial);
         flame.rotation.x = -Math.PI / 2;
-        flame.position.set(x, .52, -2.75);
+        flame.position.set(x, vehicle.style === 'truck' ? .54 : .52, vehicle.style === 'bike' ? -2.05 : -2.75);
         flame.visible = false;
         chassis.add(flame);
         this.exhausts.push(flame);
       }
       const shadow = new THREE.Mesh(new THREE.CircleGeometry(1, 24), new THREE.MeshBasicMaterial({color: 0x0e2024, transparent: true, opacity: .27, depthWrite: false}));
       shadow.rotation.x = -Math.PI / 2;
-      shadow.scale.set(1.8, 3, 1);
+      shadow.scale.set(vehicle.style === 'bike' ? 1.1 : vehicle.style === 'truck' ? 1.75 : 1.8, vehicle.style === 'bike' ? 2.6 : 3, 1);
       shadow.position.y = .018;
       car.add(shadow);
       this.scene.add(car);

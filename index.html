@@ -9,12 +9,12 @@
   <link rel="icon" type="image/png" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>まなびドライブ | たのしく まなぼう！</title>
-  <link rel="stylesheet" href="style.css?v=fix2">
+  <link rel="stylesheet" href="style.css?v=vehicles1">
   <script src="vendor/three.min.js" defer></script>
-  <script src="road-geometry.js?v=fix2" defer></script>
-  <script src="drive-3d.js?v=fix2" defer></script>
-  <script src="questions.js?v=fix2" defer></script>
-  <script src="app.js?v=fix2" defer></script>
+  <script src="road-geometry.js?v=vehicles1" defer></script>
+  <script src="drive-3d.js?v=vehicles1" defer></script>
+  <script src="questions.js?v=vehicles1" defer></script>
+  <script src="app.js?v=vehicles1" defer></script>
 </head>
 <body>
   <div class="page">
@@ -59,6 +59,12 @@
             <span aria-hidden="true">⌄</span>
           </div>
         </div>
+
+        <section class="vehicle-panel" aria-label="くるまをえらぶ">
+          <div class="vehicle-panel-title">🚗 <strong>くるまを えらぶ</strong></div>
+          <div id="vehicleChoices" class="vehicle-choices" role="group" aria-label="くるまの種類"></div>
+          <p id="vehicleProgress" class="vehicle-progress">3れんぞく せいかいで あたらしい くるまが なかまになるよ</p>
+        </section>
 
         <div class="sidebar-note">
           <div class="note-head">🎯 <strong>きょうの もくひょう</strong></div>

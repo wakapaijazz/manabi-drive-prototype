@@ -65,6 +65,23 @@
     { id:'k3-comp-station', grade:3, kind:'compound', word:'駅前', answer:'えきまえ', wrong:'やくまえ' }
   ];
 
+  const KANJI_SENTENCES = [
+    {id:'ks1-day', grade:1, text:'きょうは よい 【日】 です。', target:'日', fillWrong:'目', reading:'ひ', readingWrong:'め'},
+    {id:'ks1-tree', grade:1, text:'大きな 【木】 が あります。', target:'木', fillWrong:'本', reading:'き', readingWrong:'もり'},
+    {id:'ks1-book', grade:1, text:'学校で 【本】 を よみます。', target:'本', fillWrong:'木', reading:'ほん', readingWrong:'もと'},
+    {id:'ks1-river', grade:1, text:'【川】 で あそびます。', target:'川', fillWrong:'山', reading:'かわ', readingWrong:'うみ'},
+    {id:'ks1-sky', grade:1, text:'あさ、【空】 が あおい。', target:'空', fillWrong:'天', reading:'そら', readingWrong:'うみ'},
+    {id:'ks2-spring', grade:2, text:'【春】 に 花が さきます。', target:'春', fillWrong:'夏', reading:'はる', readingWrong:'あき'},
+    {id:'ks2-summer', grade:2, text:'【夏】 は あついです。', target:'夏', fillWrong:'冬', reading:'なつ', readingWrong:'ふゆ'},
+    {id:'ks2-train', grade:2, text:'【電車】 で 駅へ 行く。', target:'電車', fillWrong:'電気', reading:'でんしゃ', readingWrong:'てんしゃ'},
+    {id:'ks2-rain', grade:2, text:'【雨】 の 日は かさを さします。', target:'雨', fillWrong:'雪', reading:'あめ', readingWrong:'ゆき'},
+    {id:'ks2-star', grade:2, text:'大きな 【星】 を みつけた。', target:'星', fillWrong:'晴', reading:'ほし', readingWrong:'はれ'},
+    {id:'ks3-library', grade:3, text:'【図書館】 で 本を かりた。', target:'図書館', fillWrong:'図書室', reading:'としょかん', readingWrong:'ずしょかん'},
+    {id:'ks3-trip', grade:3, text:'【旅行】 に 行きます。', target:'旅行', fillWrong:'旅校', reading:'りょこう', readingWrong:'りょうこう'},
+    {id:'ks3-bridge', grade:3, text:'川に かかる 【橋】 を わたる。', target:'橋', fillWrong:'様', reading:'はし', readingWrong:'はじ'},
+    {id:'ks3-study', grade:3, text:'毎日、【勉強】 を がんばる。', target:'勉強', fillWrong:'努力', reading:'べんきょう', readingWrong:'べんごう'}
+  ];
+
   const ENGLISH_WORDS = [
     { word:'apple', meaning:'りんご', emoji:'🍎' },
     { word:'banana', meaning:'バナナ', emoji:'🍌' },
@@ -172,8 +189,12 @@
         const minute = Number(clock[2]);
         pool.push(clockText(hour + 1, minute), clockText(hour, minute + 5), clockText(hour, minute + 10));
       } else if (subject === 'kanji') {
-        const kind = q.tag?.includes('かんじを') ? 'writing' : q.tag?.includes('じゅくご') ? 'compound' : 'reading';
-        pool.push(...KANJI.filter(entry => entry.kind === kind).map(entry => entry.answer));
+        if (q.tag?.includes('ぶんしょうの かんじ')) pool.push(...KANJI_SENTENCES.map(entry => entry.target));
+        else if (q.tag?.includes('ぶんしょうの よみ')) pool.push(...KANJI_SENTENCES.map(entry => entry.reading));
+        else {
+          const kind = q.tag?.includes('かんじの かきかた') ? 'writing' : q.tag?.includes('じゅくご') ? 'compound' : 'reading';
+          pool.push(...KANJI.filter(entry => entry.kind === kind).map(entry => entry.answer));
+        }
       } else if (subject === 'english') {
         const isEnglish = /^[A-Za-z]/.test(correctText);
         if (isEnglish && /[ .!?]/.test(correctText)) pool.push(...ENGLISH_SENTENCES.map(entry => entry.english));
@@ -330,12 +351,30 @@
   }
 
   function kanjiQuestion(topic, grade, recentIds) {
-    const kind = topic === 'mix' ? pick(['reading', 'writing', 'compound']) : topic;
+    const kind = topic === 'mix' ? pick(['reading', 'writing', 'compound', 'sentence']) : topic;
+    if (kind === 'sentence') {
+      const mode = coin() ? 'fill' : 'reading';
+      const filteredSentences = KANJI_SENTENCES.filter(x => x.grade <= grade);
+      const e = freshItem(filteredSentences, recentIds);
+      if (mode === 'fill') {
+        const prompt = e.text.replace(`【${e.target}】`, '□');
+        return twoChoices({id:`${e.id}-fill`, question:'文の □ に 入る かんじは どれ？', explanation:`文の □ に 入るのは「${e.target}」だよ。`}, e.target, e.fillWrong, {
+          tag:'ぶんしょうの かんじ',
+          gradeTag:`小学${e.grade}年生`,
+          visual:{type:'sentence', text:prompt}
+        });
+      }
+      return twoChoices({id:`${e.id}-reading`, question:`文の「${e.target}」は なんと よむ？`, explanation:`「${e.target}」は「${e.reading}」と よむよ。`}, e.reading, e.readingWrong, {
+        tag:'ぶんしょうの よみ',
+        gradeTag:`小学${e.grade}年生`,
+        visual:{type:'sentence', text:e.text}
+      });
+    }
     const filtered = KANJI.filter(x => x.grade <= grade && x.kind === kind);
     const e = freshItem(filtered, recentIds);
-    const prompt = kind === 'reading' ? `「${e.word}」の よみは？` : kind === 'writing' ? `「${e.word}」に あう かんじは？` : `「${e.word}」の よみは？`;
+    const prompt = kind === 'reading' ? `「${e.word}」の よみは？` : kind === 'writing' ? `「${e.word}」を かんじで かくと どれ？` : `「${e.word}」の よみは？`;
     return twoChoices({id:e.id, question:prompt, explanation:`「${e.word}」は「${e.answer}」だよ。`}, e.answer, e.wrong, {
-      tag: kind === 'reading' ? 'かんじの よみ' : kind === 'writing' ? 'かんじを えらぶ' : 'じゅくごの よみ',
+      tag: kind === 'reading' ? 'かんじの よみ' : kind === 'writing' ? 'かんじの かきかた' : 'じゅくごの よみ',
       gradeTag: `小学${e.grade}年生`,
       visual: kind === 'writing' ? {type:'notebook'} : {type:'kanji', word:e.word}
     });
@@ -390,6 +429,7 @@
     generateQuestion,
     KANJI,
     ENGLISH_WORDS,
-    ENGLISH_SENTENCES
+    ENGLISH_SENTENCES,
+    KANJI_SENTENCES
   };
 })();

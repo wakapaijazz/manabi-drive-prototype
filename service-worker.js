@@ -1,7 +1,7 @@
-const CACHE = 'manabi-drive-v8-fix2';
+const CACHE = 'manabi-drive-v9-vehicles';
 const RESOURCES = [
-  './', './index.html', './style.css?v=fix2', './questions.js?v=fix2', './app.js?v=fix2',
-  './vendor/three.min.js', './road-geometry.js?v=fix2', './drive-3d.js?v=fix2',
+  './', './index.html', './style.css?v=vehicles1', './questions.js?v=vehicles1', './app.js?v=vehicles1',
+  './vendor/three.min.js', './road-geometry.js?v=vehicles1', './drive-3d.js?v=vehicles1',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'
 ];
 self.addEventListener('install', (event) => {

@@ -20,4 +20,24 @@ for (const boss of [false, true]) {
   }
 }
 
-console.log('Clock questions always include the answer, including boss and minute-39 cases.');
+let sentenceFillCount = 0;
+let sentenceReadingCount = 0;
+for (const boss of [false, true]) {
+  for (let i = 0; i < 500; i++) {
+    const question = generateQuestion({subject: 'kanji', topic: 'sentence', grade: 3, boss});
+    assert.ok(question.visual?.type === 'sentence', 'sentence kanji questions must show a sentence');
+    assert.ok(question.choices.includes(question.answer), 'sentence kanji choices must include the answer');
+    assert.equal(question.choices[question.correctIndex], question.answer, 'sentence kanji answer must match correctIndex');
+    if (question.tag === 'ぶんしょうの かんじ') sentenceFillCount++;
+    if (question.tag === 'ぶんしょうの よみ') sentenceReadingCount++;
+  }
+}
+assert.ok(sentenceFillCount > 0, 'sentence kanji questions must include fill-in questions');
+assert.ok(sentenceReadingCount > 0, 'sentence kanji questions must include reading questions');
+
+for (let i = 0; i < 500; i++) {
+  const question = generateQuestion({subject: 'kanji', topic: 'writing', grade: 3});
+  assert.ok(!question.question.includes('に あう かんじ'), 'writing prompts should use natural wording');
+}
+
+console.log('Clock and sentence-based kanji questions always include their answers.');

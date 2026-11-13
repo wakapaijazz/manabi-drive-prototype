@@ -48,6 +48,10 @@ for (const count of [2, 3, 4]) {
   for (const start of [-60, -35, -12]) {
     for (let index = 0; index < count; index++) {
       const route = roadGeometry.createRoute(count, index, start);
+      if (count === 2) {
+        const end = roadGeometry.routePoint(route, 1);
+        assert.equal(end.x > 0, index === 0, `${count} exits: choice ${index + 1} must end on the matching screen-side branch`);
+      }
       for (let sample = 0; sample <= 100; sample++) {
         const t = sample / 100;
         const p = roadGeometry.routePoint(route, t);

@@ -82,4 +82,4 @@ HTTPSでアクセスするとPWAとしてインストールし、キャッシュ
 - `file://` ではPWAのサービスワーカーが使用できません。
 - PWAキャッシュを更新するには、配布時に `service-worker.js` の `CACHE` 名を変更してください。
 
-道路の形と車の経路を検査するには `node tests/road-geometry.test.js` を実行します。オフライン用の資源は `node tests/service-worker.test.js` で検査できます。ローカルサーバーで `tests/road-preview.html` を開くと、上から見た道路と走行視点を切り替えられます。
+道路の形と車の経路を検査するには `node tests/road-geometry.test.js` を実行します。時計問題の正解選択肢は `node tests/questions.test.js`、オフライン用の資源は `node tests/service-worker.test.js` で検査できます。ローカルサーバーで `tests/road-preview.html` を開くと、上から見た道路と走行視点を切り替えられます。

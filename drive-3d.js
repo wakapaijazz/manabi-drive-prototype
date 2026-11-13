@@ -285,8 +285,8 @@
           if (points.every(p => G.containsPoint(outline, p))) markings.push(points);
         }
         // Continue the centre line well beyond the camera's view along the selected exit.
-        const branchSign = index === 0 ? -1 : 1;
-        const exitX = this.road.exits[index];
+        const exitX = this.road.exits[this.road.exits.length - 1 - index];
+        const branchSign = exitX < 0 ? -1 : 1;
         for (let z = count === 2 ? 45 : 67; z < 175; z += 7) {
           const branchPoint = value => count === 2
             ? {x: branchSign * (value - 1.24), z: value}

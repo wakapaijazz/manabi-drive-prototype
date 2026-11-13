@@ -56,13 +56,15 @@ vm.runInNewContext(fs.readFileSync(path.join(root, 'service-worker.js'), 'utf8')
     assert.ok(response, `request was not intercepted: ${relative}`);
     return response;
   }
-  const script = await offlineFetch('drive-3d.js?v=3d4', 'script');
+  const script = await offlineFetch('drive-3d.js?v=fix2', 'script');
   assert.match(await script.text(), /class DriveScene/);
-  const stylesheet = await offlineFetch('style.css?v=3d4', 'style');
+  const questions = await offlineFetch('questions.js?v=fix2', 'script');
+  assert.match(await questions.text(), /ensureAnswerChoice/);
+  const stylesheet = await offlineFetch('style.css?v=fix2', 'style');
   assert.match(await stylesheet.text(), /\.road-choices/);
   const page = await offlineFetch('?offline-test', 'document', 'navigate');
   assert.match(await page.text(), /まなびドライブ/);
-  const missing = await offlineFetch('missing.js?v=3d4', 'script');
+  const missing = await offlineFetch('missing.js?v=fix2', 'script');
   assert.equal(missing.type, 'error', 'a missing script must not return the HTML page');
   console.log('Required assets exist and offline requests receive the correct resource.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

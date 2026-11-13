@@ -69,7 +69,10 @@
   function createRoute(count, index, startZ) {
     const exits = BRANCH_X[count];
     if (!exits || !Number.isInteger(index) || index < 0 || index >= exits.length) throw new RangeError('invalid branch');
-    const finish = count === 2 ? point(exits[index] * .67, 41) : point(exits[index] * .94, 61);
+    // Three.js' forward-facing camera presents +X on the screen's left.
+    // Keep choice index order semantic: choice 0 is always the left-hand exit.
+    const worldExit = exits[exits.length - 1 - index];
+    const finish = count === 2 ? point(worldExit * .67, 41) : point(worldExit * .94, 61);
     const start = point(0, Math.min(-10, startZ));
     const bendStart = point(0, -10);
     const controls = [bendStart, point(0, 1), point(finish.x * (count === 2 ? .55 : .8), finish.z - 19), finish];

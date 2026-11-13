@@ -113,6 +113,9 @@
   const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
   const coin = () => Math.random() < 0.5;
   const fmt = (h, m) => `${h}時${String(m).padStart(2, '0')}分`;
+  const clockHour = (h) => ((h - 1) % 12 + 12) % 12 + 1;
+  const clockMinute = (m) => ((m % 60) + 60) % 60;
+  const clockText = (h, m) => fmt(clockHour(h), clockMinute(m));
 
   function twoChoices(question, correct, wrong, extra = {}) {
     const correctText = String(correct);
@@ -130,27 +133,30 @@
       question: question.question || question.text || '',
       choices,
       correctIndex: choices.indexOf(correctText),
+      answer: correctText,
       explanation: question.explanation || `せいかいは「${correct}」だよ。`,
       ...extra
     };
   }
 
   function multiChoices(question, choices, correctIndex, extra = {}) {
+    const values = choices.map(String);
     return {
       id: question.id || `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       interaction: 'route',
-      choiceCount: choices.length,
+      choiceCount: values.length,
       question: question.question || question.text || '',
-      choices: choices.map(String),
+      choices: values,
       correctIndex,
-      explanation: question.explanation || `せいかいは「${choices[correctIndex]}」だよ。`,
+      answer: values[correctIndex],
+      explanation: question.explanation || `せいかいは「${values[correctIndex]}」だよ。`,
       ...extra
     };
   }
 
   function bossifyQuestion(q, subject) {
     if (!q || q.choiceCount > 2 || (q.visual?.type === 'compare' && (q.choices || []).every(choice => choice === 'A' || choice === 'B'))) return q;
-    const correctText = String(q.choices[q.correctIndex]);
+    const correctText = String(q.answer ?? q.choices[q.correctIndex]);
     const pool = [];
     const numeric = Number(correctText.replaceAll(',', ''));
     if (/^-?\d+(\.\d+)?$/.test(correctText.replaceAll(',', '')) && Number.isFinite(numeric)) {
@@ -164,7 +170,6 @@
       if (clock) {
         const hour = Number(clock[1]);
         const minute = Number(clock[2]);
-        const clockText = (h, m) => `${((h - 1) % 12) + 1}時${String((m + 60) % 60).padStart(2, '0')}分`;
         pool.push(clockText(hour + 1, minute), clockText(hour, minute + 5), clockText(hour, minute + 10));
       } else if (subject === 'kanji') {
         const kind = q.tag?.includes('かんじを') ? 'writing' : q.tag?.includes('じゅくご') ? 'compound' : 'reading';
@@ -192,9 +197,22 @@
       choices: shuffled,
       choiceCount: shuffled.length,
       correctIndex: shuffled.indexOf(correctText),
+      answer: correctText,
       routeMode: 'boss',
       isBoss: true
     };
+  }
+
+  // 問題の組み立て方が増えても、正解値が選択肢から消えないよう最後に正規化する。
+  function ensureAnswerChoice(q) {
+    const choices = (q.choices || []).map(String);
+    const answer = String(q.answer ?? choices[q.correctIndex] ?? '');
+    let correctIndex = choices.indexOf(answer);
+    if (correctIndex < 0) {
+      choices[0] = answer;
+      correctIndex = 0;
+    }
+    return {...q, choices, choiceCount: choices.length, correctIndex, answer};
   }
 
   function wrongNumber(correct, max = 999) {
@@ -281,15 +299,15 @@
     // 基本は5分刻み、時々1分刻みの問題を出す
     const m = Math.random() < 0.7 ? rand(0, 11) * 5 : rand(0, 59);
     if (kind === 'read') {
-      const wrongH = h === 12 ? 1 : h + 1;
+      const wrongH = clockHour(h + 1);
       const correct = fmt(h, m);
-      const wrong = coin() ? fmt(wrongH, m) : fmt(h, (m + 5) % 60);
+      const wrong = coin() ? clockText(wrongH, m) : clockText(h, m + 5);
       return twoChoices({question:'この とけいは なんじ なんぷん？', explanation:`みじかい はりが「時」、ながい はりが「分」。${correct} だよ。`}, correct, wrong, {
         visual:{type:'clock', h, m}
       });
     }
     if (kind === 'find') {
-      const otherH = h === 12 ? 1 : h + 1;
+      const otherH = clockHour(h + 1);
       const aIsCorrect = coin();
       const a = aIsCorrect ? {h, m} : {h:otherH, m};
       const b = aIsCorrect ? {h:otherH, m} : {h, m};
@@ -298,9 +316,9 @@
       });
     }
     const hours = rand(1, 3);
-    const afterH = ((h + hours - 1) % 12) + 1;
-    const correct = fmt(afterH, m);
-    const wrong = fmt(((afterH) % 12) + 1, m);
+    const afterH = clockHour(h + hours);
+    const correct = clockText(afterH, m);
+    const wrong = clockText(afterH + 1, m);
     return twoChoices({question:`この とけいの ${hours}時間後は？`, explanation:`${fmt(h, m)} から ${hours}時間 すすむと ${correct}。`}, correct, wrong, {
       visual:{type:'clock', h, m}
     });
@@ -363,7 +381,8 @@
     } else {
       question = englishQuestion(topic, recentIds);
     }
-    return boss && !question.isBoss ? bossifyQuestion(question, subject) : question;
+    question = boss && !question.isBoss ? bossifyQuestion(question, subject) : question;
+    return ensureAnswerChoice(question);
   }
 
   // 開発コンソールからも参照できるように公開

@@ -1,9 +1,9 @@
-/* まなびドライブ：ゲームの表示・操作・セーブ（外部ライブラリ不要） */
+/* まなびドライブ：ゲームの表示・操作・セーブ */
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
   const MAX_QUESTIONS = 10;
-  const AUTO_ADVANCE_MS = 2400;
+  const AUTO_ADVANCE_MS = 4000;
   const ANSWER_LIMIT_MS = 10000;
   const TOPICS = {
     math: [
@@ -58,11 +58,11 @@
   };
   let advanceTimer = null;
   let answerTimer = null;
+  let answerLastTick = 0;
+  let worldInView = !('IntersectionObserver' in window);
   const drive = {
-    ctx: null, width: 0, height: 0, dpr: 1, lastTime: 0, frame: 0,
-    distance: 0, speed: .12, lane: 0, targetLane: 0,
-    mode: 'idle', phase: 'cruise', turnSide: 0, turnProgress: 0, shake: 0, flash: 0,
-    choiceCount: 2, isBoss: false, selectedChoice: -1, junctionDepth: .1, boost: 0, particles: []
+    scene: null, lastTime: 0, frame: 0, speed: .2, boost: 0,
+    choiceCount: 2, isBoss: false
   };
 
   function saveLocal(key, value) {
@@ -156,9 +156,14 @@
     const isBoss = count > 2;
     drive.choiceCount = count;
     drive.isBoss = isBoss;
+    if (drive.scene) {
+      drive.scene.reset(count);
+      drive.scene.setPaused(!canAnswerNow());
+    }
     el.world.classList.toggle('is-boss', isBoss);
     el.bossBadge.hidden = !isBoss;
-    el.worldTip.textContent = isBoss ? 'BOSS CROSSING！どのゲートに すすむ？' : 'どっちの みちに すすむ？';
+    el.worldTip.textContent = isBoss ? 'どの みちに すすむ？' : 'どっちの みちに すすむ？';
+    el.world.setAttribute('aria-label', isBoss ? 'どの みちが せいかいかな？' : 'どちらの みちが せいかいかな？');
     updateDriveControls(isBoss);
   }
 
@@ -166,7 +171,7 @@
     el.controlsRow.classList.toggle('is-boss', isBoss);
     for (const btn of el.drives) btn.hidden = isBoss;
     el.controlHint.innerHTML = isBoss
-      ? '🎯<span>1〜4キー または<br>みちを タップ！</span>'
+      ? '🎯<span>1〜4キー または<br>こたえを タップ！</span>'
       : '🚗<span>タップして<br>ハンドルを きろう！</span>';
   }
 
@@ -225,10 +230,13 @@
 
   function startAnswerTimer() {
     clearAnswerTimer();
-    const deadline = performance.now() + ANSWER_LIMIT_MS;
+    let remaining = ANSWER_LIMIT_MS;
+    answerLastTick = performance.now();
     const tick = () => {
       if (state.locked || el.finish.hidden === false) return;
-      const remaining = Math.max(0, deadline - performance.now());
+      const now = performance.now();
+      if (canAnswerNow()) remaining = Math.max(0, remaining - (now - answerLastTick));
+      answerLastTick = now;
       const seconds = Math.max(0, Math.ceil(remaining / 1000));
       el.answerTime.textContent = seconds;
       el.answerTimerFill.style.width = `${remaining / ANSWER_LIMIT_MS * 100}%`;
@@ -243,6 +251,16 @@
     tick();
   }
 
+  function canAnswerNow() {
+    return worldInView && document.visibilityState !== 'hidden';
+  }
+
+  function onGameVisibilityChanged() {
+    // Changing visibility must not charge the child for time spent off-screen.
+    answerLastTick = performance.now();
+    if (drive.scene && !state.locked) drive.scene.setPaused(!canAnswerNow());
+  }
+
   function timeoutQuestion() {
     if (state.locked || !state.question) return;
     const q = state.question;
@@ -251,7 +269,9 @@
     state.streak = 0;
     state.mistakes.push(q);
     playFeedbackSound(false);
-    startDriveAnimation(Math.floor((q.choiceCount || q.choices.length) / 2), false, q.choiceCount || q.choices.length);
+    el.world.classList.add('is-driving', 'is-wrong-route');
+    el.worldTip.textContent = 'じかんぎれ！ いったん とまろう';
+    if (drive.scene) drive.scene.stop();
     el.choices[q.correctIndex].classList.add('is-correct');
     for (const btn of [...el.choices, ...el.drives]) btn.disabled = true;
     el.feedback.hidden = false;
@@ -301,636 +321,51 @@
 
   function resetDriveAnimation() {
     el.world.classList.remove('is-driving', 'is-turning-left', 'is-turning-right', 'is-correct-route', 'is-wrong-route', 'is-boss');
-    drive.mode = 'idle';
-    drive.phase = 'cruise';
-    drive.turnSide = 0;
-    drive.targetLane = 0;
-    drive.turnProgress = 0;
-    drive.shake = 0;
-    drive.flash = 0;
     drive.boost = 0;
     drive.choiceCount = 2;
     drive.isBoss = false;
-    drive.selectedChoice = -1;
-    drive.junctionDepth = .1;
-    drive.particles.length = 0;
   }
 
   function startDriveAnimation(which, right, choiceCount = 2) {
     drive.choiceCount = choiceCount;
     drive.isBoss = choiceCount > 2;
-    drive.selectedChoice = which;
-    drive.turnSide = choiceCount === 2 ? (which === 0 ? -1 : 1) : ((which / (choiceCount - 1)) * 2 - 1);
-    const side = drive.turnSide < -.18 ? 'left' : drive.turnSide > .18 ? 'right' : '';
+    const turnSide = choiceCount === 2 ? (which === 0 ? -1 : 1) : ((which / (choiceCount - 1)) * 2 - 1);
+    el.worldTip.textContent = choiceCount === 2
+      ? (which === 0 ? 'ひだりの みちへ！' : 'みぎの みちへ！')
+      : `${which + 1}ばんの みちへ！`;
     el.world.classList.add('is-driving', right ? 'is-correct-route' : 'is-wrong-route');
-    el.world.classList.toggle('is-turning-left', side === 'left');
-    el.world.classList.toggle('is-turning-right', side === 'right');
-    drive.mode = right ? 'success' : 'miss';
-    drive.phase = right ? 'turn' : 'brake';
-    drive.targetLane = drive.turnSide * (choiceCount > 2 ? .72 : .68);
-    drive.turnProgress = 0;
-    drive.shake = right ? .14 : .65;
-    drive.flash = 1;
-    spawnDriveEffects(which, right);
+    el.world.classList.toggle('is-turning-left', turnSide < -.18);
+    el.world.classList.toggle('is-turning-right', turnSide > .18);
+    if (drive.scene) drive.scene.startTurn(which, right);
   }
 
   function initDriveRenderer() {
     if (!el.canvas) return;
-    drive.ctx = el.canvas.getContext('2d');
-    if (!drive.ctx) return;
-    resizeDriveCanvas();
-    window.addEventListener('resize', resizeDriveCanvas, {passive:true});
-    drive.lastTime = performance.now();
-    drive.frame = window.requestAnimationFrame(renderDriveFrame);
-  }
-
-  function resizeDriveCanvas() {
-    if (!el.canvas || !drive.ctx) return;
-    const rect = el.canvas.getBoundingClientRect();
-    drive.dpr = Math.min(window.devicePixelRatio || 1, 2);
-    drive.width = Math.max(1, rect.width);
-    drive.height = Math.max(1, rect.height);
-    el.canvas.width = Math.round(drive.width * drive.dpr);
-    el.canvas.height = Math.round(drive.height * drive.dpr);
-    drive.ctx.setTransform(drive.dpr, 0, 0, drive.dpr, 0, 0);
+    try {
+      drive.scene = new window.DriveScene(el.canvas);
+      window.addEventListener('resize', () => drive.scene.resize(), {passive: true});
+      drive.lastTime = performance.now();
+      drive.frame = window.requestAnimationFrame(renderDriveFrame);
+    } catch (error) {
+      console.error('3D rendering is unavailable:', error);
+      const message = document.createElement('div');
+      message.className = 'drive-fallback';
+      message.textContent = '3Dの どうろを ひょうじできません。あたらしいブラウザで ためしてね。';
+      el.world.append(message);
+    }
   }
 
   function renderDriveFrame(now) {
-    const dt = Math.min(.05, Math.max(0, (now - drive.lastTime) / 1000));
+    const dt = Math.min(.25, Math.max(0, (now - drive.lastTime) / 1000));
     drive.lastTime = now;
-    updateDrive(dt);
-    drawDriveScene(now / 1000);
+    drive.scene.update(dt, now / 1000);
+    drive.speed = Math.min(1.6, drive.scene.travelSpeed / 18);
+    drive.boost = drive.scene.boost;
+    updateEngineSound();
     drive.frame = window.requestAnimationFrame(renderDriveFrame);
   }
 
-  function updateDrive(dt) {
-    if (drive.mode === 'success') {
-      drive.turnProgress = Math.min(1, drive.turnProgress + dt * 1.08);
-      if (drive.turnProgress > .52) drive.phase = 'boost';
-      const targetSpeed = drive.phase === 'boost' ? 1.42 : .56;
-      drive.speed += (targetSpeed - drive.speed) * Math.min(1, dt * (drive.phase === 'boost' ? 3.2 : 7.2));
-      drive.boost += ((drive.phase === 'boost' ? 1 : 0) - drive.boost) * Math.min(1, dt * 5);
-    } else if (drive.mode === 'miss') {
-      drive.turnProgress = Math.min(1, drive.turnProgress + dt * .7);
-      drive.speed += (.33 - drive.speed) * Math.min(1, dt * 5.5);
-      drive.boost += (0 - drive.boost) * Math.min(1, dt * 6);
-    } else {
-      drive.speed += (.12 - drive.speed) * Math.min(1, dt * 4.5);
-      drive.boost += (0 - drive.boost) * Math.min(1, dt * 4);
-    }
-    drive.distance += drive.speed * dt;
-    // 車線変更は交差点の曲率に同期させ、選択直後に画面端へ飛ばないようにする。
-    const turnEase = drive.mode === 'idle' ? 0 : drive.turnProgress * drive.turnProgress * (3 - 2 * drive.turnProgress);
-    const laneReach = drive.mode === 'success' ? .72 : .54;
-    const desiredLane = drive.turnSide * laneReach * turnEase;
-    drive.lane += (desiredLane - drive.lane) * Math.min(1, dt * 2.35);
-    const junctionSpeed = drive.mode === 'idle' ? .055 : drive.mode === 'success' ? .16 : .09;
-    drive.junctionDepth = Math.min(.86, drive.junctionDepth + junctionSpeed * dt);
-    drive.shake = Math.max(0, drive.shake - dt * 1.35);
-    drive.flash = Math.max(0, drive.flash - dt * 1.7);
-    for (const particle of drive.particles) {
-      particle.x += particle.vx * dt;
-      particle.y += particle.vy * dt;
-      particle.vy += 38 * dt;
-      particle.life -= dt;
-    }
-    drive.particles = drive.particles.filter(particle => particle.life > 0);
-    updateEngineSound();
-  }
-
   function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
-  function lerp(a, b, amount) { return a + (b - a) * amount; }
-
-  function roadPoint(depth) {
-    const p = clamp(depth, 0, 1);
-    const horizon = drive.height * .45;
-    const turnAmount = drive.turnProgress * drive.turnProgress * (3 - 2 * drive.turnProgress);
-    const curve = drive.mode === 'idle'
-      ? Math.sin(drive.distance * .65 + p * 2.2) * .025
-      : drive.turnSide * turnAmount * (drive.isBoss ? .42 : .34) * Math.pow(p, 1.65);
-    return {
-      y: horizon + Math.pow(p, 1.58) * (drive.height - horizon + 18),
-      center: drive.width / 2 + curve * drive.width,
-      width: lerp(drive.width * .06, drive.width * 1.08, Math.pow(p, .86))
-    };
-  }
-
-  function drawDriveScene(time) {
-    const ctx = drive.ctx;
-    const w = drive.width;
-    const h = drive.height;
-    if (!ctx || !w || !h) return;
-    ctx.save();
-    const shakeAmount = drive.shake * 4;
-    ctx.translate(Math.sin(drive.distance * 28) * shakeAmount, Math.cos(drive.distance * 23) * shakeAmount * .45);
-    drawSky(ctx, w, h, time);
-    drawRoadside(ctx, w, h);
-    drawRoad(ctx, w, h);
-    drawSpeedLines(ctx, w, h);
-    drawCar(ctx, w, h, time);
-    drawDriveParticles(ctx);
-    if (drive.flash > 0) {
-      ctx.fillStyle = `rgba(255, 247, 181, ${drive.flash * .12})`;
-      ctx.fillRect(0, 0, w, h);
-    }
-    const vignette = ctx.createRadialGradient(w / 2, h * .5, h * .18, w / 2, h * .5, h * .8);
-    vignette.addColorStop(0, 'rgba(0, 20, 45, 0)');
-    vignette.addColorStop(1, 'rgba(0, 25, 55, .24)');
-    ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, w, h);
-    ctx.restore();
-  }
-
-  function drawSky(ctx, w, h, time) {
-    const sky = ctx.createLinearGradient(0, 0, 0, h);
-    sky.addColorStop(0, '#70cfff');
-    sky.addColorStop(.48, '#d7f7ff');
-    sky.addColorStop(.49, '#9ee3a0');
-    sky.addColorStop(1, '#3fae66');
-    ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, w, h);
-
-    const sunX = w * .79 + Math.sin(time * .08) * 5;
-    const sunY = h * .14;
-    const sunGlow = ctx.createRadialGradient(sunX, sunY, 6, sunX, sunY, 58);
-    sunGlow.addColorStop(0, '#fff8a6');
-    sunGlow.addColorStop(.4, '#ffe777aa');
-    sunGlow.addColorStop(1, '#ffe77700');
-    ctx.fillStyle = sunGlow;
-    ctx.fillRect(sunX - 60, sunY - 60, 120, 120);
-    ctx.fillStyle = '#ffe879';
-    ctx.beginPath(); ctx.arc(sunX, sunY, 23, 0, Math.PI * 2); ctx.fill();
-
-    drawCloud(ctx, w * .12 - (drive.distance * 15) % (w * .3), h * .16, 1.05);
-    drawCloud(ctx, w * .66 + (drive.distance * 11) % (w * .25), h * .25, .72);
-
-    ctx.fillStyle = '#6dc77e';
-    ctx.beginPath();
-    ctx.moveTo(0, h * .49);
-    for (let x = 0; x <= w; x += 24) ctx.lineTo(x, h * .43 + Math.sin(x * .013 + drive.distance) * 15);
-    ctx.lineTo(w, h * .62); ctx.lineTo(0, h * .62); ctx.closePath(); ctx.fill();
-  }
-
-  function drawCloud(ctx, x, y, scale) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(scale, scale);
-    ctx.fillStyle = '#ffffffb9';
-    ctx.beginPath();
-    ctx.ellipse(0, 10, 44, 15, 0, 0, Math.PI * 2);
-    ctx.arc(-22, 2, 16, 0, Math.PI * 2);
-    ctx.arc(2, -5, 23, 0, Math.PI * 2);
-    ctx.arc(28, 5, 17, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function drawRoadside(ctx, w, h) {
-    const moving = (drive.distance * 1.05) % 1;
-    for (let i = 0; i < 8; i++) {
-      const depth = (i / 8 + moving) % 1;
-      if (depth < .04) continue;
-      const point = roadPoint(depth);
-      const size = .14 + depth * .95;
-      const side = i % 2 === 0 ? -1 : 1;
-      const x = point.center + side * (point.width / 2 + 18 * size);
-      drawRoadPost(ctx, x, point.y, size, side);
-      if (i % 3 !== 1) drawTree(ctx, x + side * 18 * size, point.y + 3 * size, size * .9, i % 4 === 0 ? '#238d60' : '#2da76a');
-    }
-  }
-
-  function drawRoadPost(ctx, x, y, size, side) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(size, size);
-    ctx.fillStyle = '#d7e4d5';
-    ctx.fillRect(-2, -34, 4, 34);
-    ctx.fillStyle = '#ffe07b';
-    ctx.fillRect(-6, -34, 12, 8);
-    ctx.fillStyle = '#ffffff99';
-    ctx.fillRect(side < 0 ? -7 : 3, -31, 4, 2);
-    ctx.restore();
-  }
-
-  function drawTree(ctx, x, y, size, color) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(size, size);
-    ctx.fillStyle = '#744f3b';
-    ctx.fillRect(-3, -28, 6, 28);
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(0, -39, 17, 0, Math.PI * 2);
-    ctx.arc(-10, -27, 12, 0, Math.PI * 2);
-    ctx.arc(11, -26, 13, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function drawRoad(ctx, w, h) {
-    const geometry = buildRoadGeometry(w, h);
-
-    // 幹線・分岐・交差点の舗装面を一つのパスとして塗る。
-    // パーツごとの色分けや境界線をここで行わないため、継ぎ目が発生しない。
-    ctx.save();
-    ctx.fillStyle = '#30495f';
-    fillContinuousRoad(ctx, geometry);
-
-    // 路面の質感は、道路の輪郭を分割せず、同じ面の上に薄く重ねる。
-    if (geometry.count === 2) {
-      ctx.save();
-      traceContinuousRoad(ctx, geometry);
-      ctx.clip();
-      for (let i = 2; i < 25; i++) {
-        const depth = i / 25;
-        const point = roadPoint(depth);
-        ctx.strokeStyle = i % 2 ? '#3d5870aa' : '#233c53aa';
-        ctx.lineWidth = Math.max(1, point.width * .012);
-        ctx.beginPath();
-        ctx.moveTo(point.center - point.width * .47, point.y);
-        ctx.lineTo(point.center + point.width * .47, point.y);
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
-    ctx.restore();
-
-    drawRoadMarkings(ctx, geometry);
-    if (drive.isBoss) drawBossIntersection(ctx, w, h);
-  }
-
-  function buildRoadGeometry(w, h) {
-    const count = Math.max(2, drive.choiceCount);
-    const junction = roadPoint(drive.junctionDepth);
-    const far = roadPoint(.018);
-    const nearSpread = drive.isBoss ? .55 : .45;
-    // 外側の分岐の端が、交差点で幹線の端へ届くように幅を共有する。
-    const nearWidth = junction.width * (drive.isBoss ? .45 : .55);
-    const farWidth = Math.max(16, Math.min(w * .1, far.width * 1.35));
-    const trunkLeft = [];
-    const trunkRight = [];
-    const trunkSamples = 42;
-    for (let i = 0; i <= trunkSamples; i++) {
-      const point = roadPoint(i / trunkSamples);
-      trunkLeft.push({x: point.center - point.width / 2, y: point.y});
-      trunkRight.push({x: point.center + point.width / 2, y: point.y});
-    }
-
-    const ribbons = [];
-    for (let i = 0; i < count; i++) {
-      const ratio = i / (count - 1);
-      const targetX = w * (.08 + ratio * .84);
-      const nearCenter = junction.center + (ratio - .5) * junction.width * nearSpread;
-      const deltaY = junction.y - far.y;
-      const path = {
-        p0: {x: targetX, y: far.y},
-        // 分岐の根元では接線を横へ向け、急な折れではなく緩いカーブにする。
-        p1: {x: targetX + (nearCenter - targetX) * .22, y: far.y + deltaY * .18},
-        p2: {x: nearCenter + (targetX - nearCenter) * .42, y: junction.y - deltaY * .36},
-        p3: {x: nearCenter, y: junction.y}
-      };
-      ribbons.push({path, highlighted: drive.selectedChoice === i, points: makeBranchRibbon(path, farWidth, nearWidth)});
-    }
-    return {count, junction, trunkLeft, trunkRight, ribbons};
-  }
-
-  function traceContinuousRoad(ctx, geometry) {
-    ctx.beginPath();
-    if (geometry.count === 2) {
-      appendTwoWayForkPath(ctx, geometry);
-      return;
-    }
-    // ボス交差点は中央ハブを共有する一つの路面として塗る。
-    appendRibbonPath(ctx, geometry.trunkLeft, geometry.trunkRight);
-    for (const ribbon of geometry.ribbons) appendRibbonPath(ctx, ribbon.points.left, ribbon.points.right);
-    // 4本の枝の間も同じ舗装ハブで受け止め、芝生の切れ込みを交差点の外へ出さない。
-    const nearRoadWidth = geometry.trunkRight[geometry.trunkRight.length - 1].x - geometry.trunkLeft[geometry.trunkLeft.length - 1].x;
-    const hubWidth = Math.max(geometry.junction.width * 1.45, nearRoadWidth);
-    const hubHeight = Math.max(34, geometry.junction.width * .48);
-    ctx.ellipse(
-      geometry.junction.center,
-      geometry.junction.y + hubHeight * .12,
-      hubWidth * .62,
-      hubHeight,
-      0,
-      0,
-      Math.PI * 2
-    );
-    ctx.ellipse(
-      geometry.junction.center,
-      geometry.junction.y + Math.max(8, geometry.junction.width * .045),
-      geometry.junction.width * .58,
-      Math.max(18, geometry.junction.width * .2),
-      0,
-      0,
-      Math.PI * 2
-    );
-  }
-
-  function fillContinuousRoad(ctx, geometry) {
-    if (geometry.count === 2) {
-      traceContinuousRoad(ctx, geometry);
-      ctx.fill();
-      return;
-    }
-
-    // ボス交差点はサブパスを一括で塗らず、同じ色で順に塗る。
-    // Canvasの巻き方向による穴を防ぎ、中央ハブまで完全な舗装面にする。
-    ctx.beginPath();
-    appendRibbonPath(ctx, geometry.trunkLeft, geometry.trunkRight);
-    ctx.fill();
-    for (const ribbon of geometry.ribbons) {
-      ctx.beginPath();
-      appendRibbonPath(ctx, ribbon.points.left, ribbon.points.right);
-      ctx.fill();
-    }
-    const nearRoadWidth = geometry.trunkRight[geometry.trunkRight.length - 1].x - geometry.trunkLeft[geometry.trunkLeft.length - 1].x;
-    const hubWidth = Math.max(geometry.junction.width * 1.45, nearRoadWidth);
-    const hubHeight = Math.max(34, geometry.junction.width * .48);
-    ctx.beginPath();
-    ctx.ellipse(
-      geometry.junction.center,
-      geometry.junction.y + hubHeight * .12,
-      hubWidth * .62,
-      hubHeight,
-      0,
-      0,
-      Math.PI * 2
-    );
-    ctx.fill();
-  }
-
-  function appendTwoWayForkPath(ctx, geometry) {
-    const start = Math.max(0, Math.floor(drive.junctionDepth * (geometry.trunkLeft.length - 1)));
-    const leftBranch = geometry.ribbons[0].points;
-    const rightBranch = geometry.ribbons[1].points;
-    const leftOuter = leftBranch.left;
-    const leftInner = leftBranch.right;
-    const rightInner = rightBranch.left;
-    const rightOuter = rightBranch.right;
-
-    // 手前の幹線左端から、左枝の外周、中央の接続点、右枝の外周を
-    // 一筆でたどって幹線右端へ戻る。内部に別の道路パーツを重ねない。
-    ctx.moveTo(geometry.trunkLeft[geometry.trunkLeft.length - 1].x, geometry.trunkLeft[geometry.trunkLeft.length - 1].y);
-    for (let i = geometry.trunkLeft.length - 2; i >= start; i--) ctx.lineTo(geometry.trunkLeft[i].x, geometry.trunkLeft[i].y);
-    for (let i = leftOuter.length - 1; i >= 0; i--) ctx.lineTo(leftOuter[i].x, leftOuter[i].y);
-    for (let i = 0; i < leftInner.length; i++) ctx.lineTo(leftInner[i].x, leftInner[i].y);
-    ctx.lineTo(geometry.junction.center, geometry.junction.y + Math.max(4, geometry.junction.width * .035));
-    for (let i = rightInner.length - 1; i >= 0; i--) ctx.lineTo(rightInner[i].x, rightInner[i].y);
-    for (let i = 0; i < rightOuter.length; i++) ctx.lineTo(rightOuter[i].x, rightOuter[i].y);
-    for (let i = start + 1; i < geometry.trunkRight.length; i++) ctx.lineTo(geometry.trunkRight[i].x, geometry.trunkRight[i].y);
-    ctx.closePath();
-  }
-
-  function appendRibbonPath(ctx, left, right) {
-    ctx.moveTo(left[0].x, left[0].y);
-    for (let i = 1; i < left.length; i++) ctx.lineTo(left[i].x, left[i].y);
-    for (let i = right.length - 1; i >= 0; i--) ctx.lineTo(right[i].x, right[i].y);
-    ctx.closePath();
-  }
-
-  function drawRoadMarkings(ctx, geometry) {
-    ctx.lineCap = 'round';
-    const start = Math.max(0, Math.floor(drive.junctionDepth * (geometry.trunkLeft.length - 1)) - 1);
-    const trunkLeft = geometry.trunkLeft.slice(start);
-    const trunkRight = geometry.trunkRight.slice(start);
-    ctx.strokeStyle = '#f1dfab';
-    ctx.lineWidth = 3;
-    strokePolyline(ctx, trunkLeft);
-    strokePolyline(ctx, trunkRight);
-
-    const outerBranches = [geometry.ribbons[0].points.left, geometry.ribbons[geometry.ribbons.length - 1].points.right];
-    for (const edge of outerBranches) {
-      ctx.strokeStyle = '#e7dcae';
-      ctx.lineWidth = 2.5;
-      strokePolyline(ctx, edge);
-    }
-
-    ctx.save();
-    ctx.setLineDash([10, 13]);
-    ctx.lineWidth = 1.7;
-    ctx.strokeStyle = '#dce8e2c8';
-    const laneMarks = drive.isBoss ? [-.5, -.17, .17, .5] : [-.33, .33];
-    for (const lane of laneMarks) {
-      const points = [];
-      for (let i = start; i < geometry.trunkLeft.length; i++) {
-        const depth = i / (geometry.trunkLeft.length - 1);
-        const point = roadPoint(depth);
-        points.push({x: point.center + point.width * lane, y: point.y});
-      }
-      strokePolyline(ctx, points);
-    }
-    for (const ribbon of geometry.ribbons) {
-      ctx.strokeStyle = ribbon.highlighted ? '#ffffffee' : '#dce8e2c0';
-      ctx.lineWidth = ribbon.highlighted ? 2.5 : 1.5;
-      strokePolyline(ctx, ribbon.points.center);
-    }
-    ctx.restore();
-  }
-
-  function strokePolyline(ctx, points) {
-    if (!points || points.length < 2) return;
-    ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
-    ctx.stroke();
-  }
-
-  function cubicPoint(path, t) {
-    const u = 1 - t;
-    return {
-      x: u * u * u * path.p0.x + 3 * u * u * t * path.p1.x + 3 * u * t * t * path.p2.x + t * t * t * path.p3.x,
-      y: u * u * u * path.p0.y + 3 * u * u * t * path.p1.y + 3 * u * t * t * path.p2.y + t * t * t * path.p3.y
-    };
-  }
-
-  function makeBranchRibbon(path, farWidth, nearWidth) {
-    const left = [];
-    const right = [];
-    const center = [];
-    const steps = 28;
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      const point = cubicPoint(path, t);
-      const previous = cubicPoint(path, Math.max(0, t - .01));
-      const next = cubicPoint(path, Math.min(1, t + .01));
-      const dx = next.x - previous.x;
-      const dy = next.y - previous.y;
-      const length = Math.max(.001, Math.hypot(dx, dy));
-      const half = (farWidth + (nearWidth - farWidth) * t) / 2;
-      const nx = -dy / length;
-      const ny = dx / length;
-      center.push(point);
-      left.push({x: point.x + nx * half, y: point.y + ny * half});
-      right.push({x: point.x - nx * half, y: point.y - ny * half});
-    }
-    return {left, right, center};
-  }
-
-  function drawBossIntersection(ctx, w, h) {
-    const junction = roadPoint(drive.junctionDepth);
-    const crossY = junction.y + 3;
-    const crossWidth = Math.max(w * .48, junction.width * 2.2);
-    ctx.save();
-    ctx.globalAlpha = .92;
-    ctx.fillStyle = '#263b50';
-    ctx.beginPath();
-    ctx.moveTo(junction.center - crossWidth, crossY - 9);
-    ctx.lineTo(junction.center + crossWidth, crossY - 9);
-    ctx.lineTo(junction.center + crossWidth * .94, crossY + 18);
-    ctx.lineTo(junction.center - crossWidth * .94, crossY + 18);
-    ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = '#f8e5a5'; ctx.lineWidth = 3;
-    for (let x = junction.center - crossWidth * .8; x < junction.center + crossWidth * .8; x += 32) {
-      ctx.beginPath(); ctx.moveTo(x, crossY - 7); ctx.lineTo(x + 8, crossY + 16); ctx.stroke();
-    }
-    ctx.fillStyle = '#eaffff';
-    ctx.fillRect(w * .2, h * .31, w * .6, 5);
-    ctx.fillStyle = '#ffcf5c';
-    ctx.fillRect(w * .2, h * .31, 8, 34);
-    ctx.fillRect(w * .8 - 8, h * .31, 8, 34);
-    ctx.fillStyle = '#ff5d73';
-    ctx.beginPath(); ctx.arc(w * .5, h * .325, 7, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-  }
-
-  function drawSpeedLines(ctx, w, h) {
-    const intensity = clamp((drive.speed - .12) * 1.9, 0, 1);
-    if (intensity <= 0) return;
-    ctx.save();
-    ctx.globalAlpha = intensity * (.35 + drive.boost * .35);
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineCap = 'round';
-    for (let i = 0; i < (drive.boost > .2 ? 16 : 9); i++) {
-      const x = ((i * 97 + drive.distance * 380) % (w + 80)) - 40;
-      const y = h * (.3 + (i % 5) * .12);
-      ctx.lineWidth = 1 + (i % 3) + drive.boost * 1.4;
-      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - drive.turnSide * 18, y + 24 + intensity * 28); ctx.stroke();
-    }
-    if (drive.boost > .3) {
-      ctx.globalAlpha = drive.boost * .2;
-      ctx.fillStyle = '#baf5ff';
-      ctx.fillRect(0, h * .38, w, h * .02);
-    }
-    ctx.restore();
-  }
-
-  function drawCar(ctx, w, h, time) {
-    const road = roadPoint(1);
-    const rawX = road.center + drive.lane * road.width * .24;
-    const x = clamp(rawX, w * .13, w * .87);
-    const y = h - 20 + Math.sin(time * 22) * (drive.mode === 'idle' ? 1 : 2.6);
-    const tilt = drive.lane * .22 + Math.sin(time * 18) * (drive.mode === 'idle' ? .01 : .025);
-    const scale = clamp(w / 620, .62, 1.12);
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(tilt);
-    ctx.scale(scale, scale);
-
-    if (drive.boost > .05) {
-      const flame = 18 + Math.sin(time * 38) * 6 + drive.boost * 22;
-      ctx.globalAlpha = .55 + drive.boost * .35;
-      ctx.shadowColor = '#ffdf62'; ctx.shadowBlur = 20;
-      ctx.fillStyle = '#fff4a3';
-      ctx.beginPath(); ctx.moveTo(-22, 3); ctx.lineTo(-9, 2); ctx.lineTo(-15, flame); ctx.closePath(); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(22, 3); ctx.lineTo(9, 2); ctx.lineTo(15, flame); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = '#ff8b45';
-      ctx.beginPath(); ctx.moveTo(-18, 4); ctx.lineTo(-11, 4); ctx.lineTo(-15, flame * .72); ctx.closePath(); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(18, 4); ctx.lineTo(11, 4); ctx.lineTo(15, flame * .72); ctx.closePath(); ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = 1;
-    }
-
-    ctx.fillStyle = '#14283e55';
-    ctx.beginPath(); ctx.ellipse(0, 7, 47, 11, 0, 0, Math.PI * 2); ctx.fill();
-
-    drawRacingWheel(ctx, -35, -19, time * drive.speed * 8);
-    drawRacingWheel(ctx, 35, -19, time * drive.speed * 8);
-    drawRacingWheel(ctx, -30, -70, time * drive.speed * 8);
-    drawRacingWheel(ctx, 30, -70, time * drive.speed * 8);
-
-    // rear wing and aerodynamic side pods
-    ctx.fillStyle = '#101d36';
-    roundedRect(ctx, -43, -1, 86, 8, 3); ctx.fill();
-    ctx.fillStyle = '#55d8ff';
-    ctx.fillRect(-36, -4, 72, 3);
-    ctx.fillStyle = '#1c3762';
-    roundedRect(ctx, -42, -51, 16, 35, 6); ctx.fill();
-    roundedRect(ctx, 26, -51, 16, 35, 6); ctx.fill();
-
-    // low, pointed formula-style body
-    const body = ctx.createLinearGradient(-36, -112, 36, 8);
-    body.addColorStop(0, '#a8edff'); body.addColorStop(.16, '#53c7ff'); body.addColorStop(.54, '#2479e5'); body.addColorStop(1, '#102f89');
-    ctx.fillStyle = body;
-    ctx.beginPath();
-    ctx.moveTo(0, -112);
-    ctx.lineTo(14, -94); ctx.lineTo(23, -63); ctx.lineTo(34, -27);
-    ctx.lineTo(28, -5); ctx.lineTo(0, 5); ctx.lineTo(-28, -5);
-    ctx.lineTo(-34, -27); ctx.lineTo(-23, -63); ctx.lineTo(-14, -94); ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = '#092d83'; ctx.lineWidth = 3; ctx.stroke();
-
-    // cockpit / canopy
-    ctx.fillStyle = '#102c59';
-    ctx.beginPath(); ctx.moveTo(-17, -78); ctx.quadraticCurveTo(0, -94, 17, -78); ctx.lineTo(14, -46); ctx.quadraticCurveTo(0, -37, -14, -46); ctx.closePath(); ctx.fill();
-    const canopy = ctx.createLinearGradient(0, -83, 0, -43);
-    canopy.addColorStop(0, '#efffff'); canopy.addColorStop(.45, '#7ee6ff'); canopy.addColorStop(1, '#2d8fd6');
-    ctx.fillStyle = canopy;
-    ctx.beginPath(); ctx.moveTo(-12, -76); ctx.quadraticCurveTo(0, -87, 12, -76); ctx.lineTo(10, -51); ctx.quadraticCurveTo(0, -45, -10, -51); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = '#d9fbff'; ctx.lineWidth = 2; ctx.stroke();
-    ctx.fillStyle = '#ffffffa8'; ctx.fillRect(-7, -73, 4, 20);
-
-    // nose, front wing and neon trim
-    ctx.fillStyle = '#e8fbff';
-    ctx.beginPath(); ctx.moveTo(-11, -102); ctx.lineTo(0, -114); ctx.lineTo(11, -102); ctx.lineTo(7, -94); ctx.lineTo(-7, -94); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#122451'; ctx.fillRect(-43, -105, 86, 5); ctx.fillRect(-33, -110, 66, 4);
-    ctx.strokeStyle = '#7ff5ff'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(-27, -28); ctx.lineTo(-18, -16); ctx.lineTo(-8, -10); ctx.moveTo(27, -28); ctx.lineTo(18, -16); ctx.lineTo(8, -10); ctx.stroke();
-    ctx.fillStyle = '#fff3a7'; ctx.fillRect(-19, -88, 9, 5); ctx.fillRect(10, -88, 9, 5);
-    ctx.fillStyle = '#ff617b'; ctx.fillRect(-22, -2, 13, 4); ctx.fillRect(9, -2, 13, 4);
-    ctx.restore();
-  }
-
-  function drawRacingWheel(ctx, x, y, spin) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(spin);
-    ctx.fillStyle = '#111c2c';
-    ctx.beginPath(); ctx.ellipse(0, 0, 8, 16, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#91a6bd';
-    ctx.beginPath(); ctx.ellipse(0, 0, 3.5, 8, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#dff5ff';
-    ctx.fillRect(-1, -6, 2, 12); ctx.restore();
-  }
-
-  function roundedRect(ctx, x, y, width, height, radius) {
-    const r = Math.min(radius, width / 2, height / 2);
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + width, y, x + width, y + height, r);
-    ctx.arcTo(x + width, y + height, x, y + height, r);
-    ctx.arcTo(x, y + height, x, y, r);
-    ctx.arcTo(x, y, x + width, y, r);
-    ctx.closePath();
-  }
-
-  function drawDriveParticles(ctx) {
-    for (const particle of drive.particles) {
-      ctx.save();
-      ctx.globalAlpha = clamp(particle.life * 1.7, 0, 1);
-      ctx.translate(particle.x, particle.y);
-      ctx.rotate(particle.life * 7);
-      ctx.fillStyle = particle.color;
-      if (particle.kind === 'coin') {
-        ctx.beginPath(); ctx.arc(0, 0, particle.size, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = '#fff7bd'; ctx.lineWidth = 1; ctx.stroke();
-      } else {
-        ctx.fillRect(-particle.size / 2, -particle.size / 2, particle.size, particle.size);
-      }
-      ctx.restore();
-    }
-  }
-
   function showFinish() {
     const stars = state.correct >= 9 ? 3 : state.correct >= 6 ? 2 : 1;
     el.finishStars.textContent = '⭐'.repeat(stars) + '☆'.repeat(3 - stars);
@@ -1186,26 +621,6 @@
     } catch (_) { /* 音が出ない環境でもゲームは続けられます */ }
   }
 
-  function spawnDriveEffects(which, right) {
-    const fork = roadPoint(.88);
-    const x = fork.center + drive.turnSide * fork.width * .25;
-    const y = fork.y - 12;
-    const colors = right ? ['#fff7b5', '#ffe36e', '#ffffff'] : ['#ffb17f', '#ff8d72', '#ffe0ae'];
-    for (let i = 0; i < 18; i++) {
-      const angle = (Math.PI * 2 * i) / 18 + (which ? .12 : -.12);
-      const force = 34 + (i % 5) * 10;
-      drive.particles.push({
-        x, y,
-        vx: Math.cos(angle) * force,
-        vy: Math.sin(angle) * force - (right ? 18 : 8),
-        life: .58 + (i % 4) * .12,
-        size: right && i % 4 === 0 ? 6 : 3 + (i % 3),
-        kind: right && i % 4 === 0 ? 'coin' : 'spark',
-        color: colors[i % colors.length]
-      });
-    }
-  }
-
   function speakEnglish() {
     const text = state.question && state.question.speech;
     if (!text || !('speechSynthesis' in window)) return;
@@ -1286,6 +701,14 @@
   el.sound.setAttribute('aria-pressed', String(state.sound));
   el.sound.innerHTML = state.sound ? '🔊 <span>おと ON</span>' : '🔇 <span>おと OFF</span>';
   initDriveRenderer();
+  if ('IntersectionObserver' in window) {
+    const observer = new IntersectionObserver(entries => {
+      worldInView = entries.some(entry => entry.isIntersecting && entry.intersectionRatio >= .25);
+      onGameVisibilityChanged();
+    }, {threshold: [0, .25]});
+    observer.observe(el.world);
+  }
+  document.addEventListener('visibilitychange', onGameVisibilityChanged);
   updateTopics();
   resetGame();
 

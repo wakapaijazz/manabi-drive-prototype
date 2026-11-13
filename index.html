@@ -9,9 +9,12 @@
   <link rel="icon" type="image/png" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>まなびドライブ | たのしく まなぼう！</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=3d4">
+  <script src="vendor/three.min.js" defer></script>
+  <script src="road-geometry.js?v=3d4" defer></script>
+  <script src="drive-3d.js?v=3d4" defer></script>
   <script src="questions.js" defer></script>
-  <script src="app.js" defer></script>
+  <script src="app.js?v=3d4" defer></script>
 </head>
 <body>
   <div class="page">
@@ -87,10 +90,10 @@
           <div id="questionVisual" class="question-visual" aria-label="もんだいの ず"></div>
         </div>
 
+        <div id="roadChoices" class="road-choices choice-count-2" aria-label="こたえの みち"></div>
         <div class="world" id="world" aria-label="どちらの みちが せいかいかな？">
           <canvas id="driveCanvas" class="drive-canvas" aria-hidden="true"></canvas>
           <div id="answerTimer" class="answer-timer" role="timer" aria-live="polite"><span aria-hidden="true">⏱</span><strong id="answerTime">10</strong><span>びょう</span><div class="answer-timer-track"><span id="answerTimerFill"></span></div></div>
-          <div id="roadChoices" class="road-choices choice-count-2" aria-label="こたえの みち"></div>
           <div id="bossBadge" class="boss-badge" hidden>⚡ BOSS CROSSING</div>
           <div id="worldTip" class="world-tip">どっちの みちに すすむ？</div>
         </div>

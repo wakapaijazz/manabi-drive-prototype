@@ -1,6 +1,7 @@
-const CACHE = 'manabi-drive-v4';
+const CACHE = 'manabi-drive-v7-3d';
 const RESOURCES = [
-  './', './index.html', './style.css', './questions.js', './app.js',
+  './', './index.html', './style.css?v=3d4', './questions.js', './app.js?v=3d4',
+  './vendor/three.min.js', './road-geometry.js?v=3d4', './drive-3d.js?v=3d4',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'
 ];
 self.addEventListener('install', (event) => {
@@ -21,7 +22,10 @@ self.addEventListener('fetch', (event) => {
         const copy = response.clone();
         caches.open(CACHE).then(cache => cache.put(event.request, copy)).catch(() => {});
         return response;
-      }).catch(() => caches.match(event.request).then(cached => cached || caches.match('./index.html')))
+      }).catch(() => caches.match(event.request).then(cached => cached || caches.match(event.request, {ignoreSearch: true})).then(cached => {
+        if (cached) return cached;
+        return event.request.mode === 'navigate' ? caches.match('./index.html') : Response.error();
+      }))
     );
     return;
   }

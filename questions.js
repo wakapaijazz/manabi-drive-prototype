@@ -188,6 +188,13 @@
         const hour = Number(clock[1]);
         const minute = Number(clock[2]);
         pool.push(clockText(hour + 1, minute), clockText(hour, minute + 5), clockText(hour, minute + 10));
+      } else if (subject === 'math') {
+        const remainder = correctText.match(/^(\d+)\s*あまり\s*(\d+)$/);
+        if (remainder) {
+          const quotient = Number(remainder[1]);
+          const rest = Number(remainder[2]);
+          pool.push(`${quotient + 1} あまり ${rest}`, `${quotient + 2} あまり ${rest}`, `${Math.max(1, quotient - 1)} あまり ${rest}`);
+        }
       } else if (subject === 'kanji') {
         if (q.tag?.includes('ぶんしょうの かんじ')) pool.push(...KANJI_SENTENCES.map(entry => entry.target));
         else if (q.tag?.includes('ぶんしょうの よみ')) pool.push(...KANJI_SENTENCES.map(entry => entry.reading));
@@ -240,6 +247,79 @@
     const delta = pick([1, 2, 3, 5, 10, 11, 20]);
     const cand = correct + (coin() ? delta : -delta);
     return cand > 0 && cand <= max ? cand : correct + (correct + delta <= max ? delta : -1);
+  }
+
+  const MATH_LEVELS = [
+    {level:1, type:'add1', label:'1けたの たし算'},
+    {level:2, type:'sub1', label:'1けたの ひき算'},
+    {level:3, type:'add2', label:'2けたの たし算'},
+    {level:4, type:'sub2', label:'2けたの ひき算'},
+    {level:5, type:'multiply1', label:'九九の かけ算'},
+    {level:6, type:'divide1', label:'九九の わり算'},
+    {level:7, type:'multiply2', label:'2けた × 1けた'},
+    {level:8, type:'divideRemainder', label:'あまりの ある わり算'}
+  ];
+
+  function mathLevelInfo(level = 1) {
+    const index = Math.max(0, Math.min(MATH_LEVELS.length - 1, Math.floor(Number(level) || 1) - 1));
+    return MATH_LEVELS[index];
+  }
+
+  function levelledMath(question, spec) {
+    return {...question, level:spec.level, levelTag:spec.label, mathType:spec.type};
+  }
+
+  function mathLevelQuestion(level = 1) {
+    const spec = mathLevelInfo(level);
+    if (spec.type === 'add1') {
+      const a = rand(1, 8);
+      const b = rand(1, 9 - a);
+      const result = a + b;
+      return levelledMath(twoChoices({question:`${a} ＋ ${b} = ?`, explanation:`${a} ＋ ${b} = ${result} だよ。`}, result, wrongNumber(result)), spec);
+    }
+    if (spec.type === 'sub1') {
+      const a = rand(1, 9);
+      const b = rand(0, a);
+      const result = a - b;
+      return levelledMath(twoChoices({question:`${a} － ${b} = ?`, explanation:`${a} － ${b} = ${result} だよ。`}, result, wrongNumber(result)), spec);
+    }
+    if (spec.type === 'add2') {
+      const a = rand(10, 49);
+      const b = rand(10, 99 - a);
+      const result = a + b;
+      return levelledMath(twoChoices({question:`${a} ＋ ${b} = ?`, explanation:`${a} ＋ ${b} = ${result} だよ。`}, result, wrongNumber(result)), spec);
+    }
+    if (spec.type === 'sub2') {
+      const a = rand(20, 99);
+      const b = rand(10, a - 10);
+      const result = a - b;
+      return levelledMath(twoChoices({question:`${a} － ${b} = ?`, explanation:`${a} － ${b} = ${result} だよ。`}, result, wrongNumber(result)), spec);
+    }
+    if (spec.type === 'multiply1') {
+      const a = rand(1, 9);
+      const b = rand(1, 9);
+      const result = a * b;
+      return levelledMath(twoChoices({question:`${a} × ${b} = ?`, explanation:`${a} × ${b} = ${result} だよ。`}, result, wrongNumber(result)), spec);
+    }
+    if (spec.type === 'divide1') {
+      const divisor = rand(2, 9);
+      const quotient = rand(1, 9);
+      const dividend = divisor * quotient;
+      return levelledMath(twoChoices({question:`${dividend} ÷ ${divisor} = ?`, explanation:`${divisor} × ${quotient} = ${dividend} だから、こたえは ${quotient}。`}, quotient, wrongNumber(quotient, 12)), spec);
+    }
+    if (spec.type === 'multiply2') {
+      const a = rand(10, 99);
+      const b = rand(2, 9);
+      const result = a * b;
+      return levelledMath(twoChoices({question:`${a} × ${b} = ?`, explanation:`${a} × ${b} = ${result} だよ。`}, result, wrongNumber(result)), spec);
+    }
+    const divisor = rand(2, 9);
+    const quotient = rand(1, 9);
+    const remainder = rand(1, divisor - 1);
+    const dividend = divisor * quotient + remainder;
+    const answer = `${quotient} あまり ${remainder}`;
+    const wrong = `${quotient + 1} あまり ${remainder}`;
+    return levelledMath(twoChoices({question:`${dividend} ÷ ${divisor} = ?`, explanation:`${divisor} × ${quotient} ＋ ${remainder} = ${dividend} だから、こたえは ${answer}。`}, answer, wrong), spec);
   }
 
   function mathCalculation(type) {
@@ -406,15 +486,17 @@
     return twoChoices({id:e.id, question:`「${e.english}」の いみは？`, explanation:`${e.english} = ${e.japanese}`, }, e.japanese, other.japanese, {speech:e.english, tag:'えいぶん'});
   }
 
-  function generateQuestion({subject='math', topic='mix', grade=3, recentIds=[], boss=false}={}) {
+  function generateQuestion({subject='math', topic='mix', grade=3, recentIds=[], boss=false, mathLevel=1}={}) {
     let question;
     if (subject === 'math') {
-      const available = ['addsub', 'multiply', 'divide', 'count', 'compare', 'clock'];
-      const kind = topic === 'mix' ? pick(available) : topic;
-      if (['addsub','multiply','divide'].includes(kind)) question = {...mathCalculation(kind), tag: {addsub:'たし算・ひき算',multiply:'かけ算',divide:'わり算'}[kind]};
-      else if (kind === 'count') question = {...mathBlocks(), tag:'かずを かぞえる'};
-      else if (kind === 'compare') question = {...mathCompare(boss), tag:'くらべる'};
-      else question = {...mathClock(), tag:'とけい'};
+      if (topic === 'mix') question = mathLevelQuestion(mathLevel);
+      else {
+        const kind = topic;
+        if (['addsub','multiply','divide'].includes(kind)) question = {...mathCalculation(kind), tag: {addsub:'たし算・ひき算',multiply:'かけ算',divide:'わり算'}[kind]};
+        else if (kind === 'count') question = {...mathBlocks(), tag:'かずを かぞえる'};
+        else if (kind === 'compare') question = {...mathCompare(boss), tag:'くらべる'};
+        else question = {...mathClock(), tag:'とけい'};
+      }
     } else if (subject === 'kanji') {
       question = kanjiQuestion(topic, Number(grade), recentIds);
     } else {
@@ -428,6 +510,7 @@
   window.StudyQuestions = {
     generateQuestion,
     KANJI,
+    MATH_LEVELS,
     ENGLISH_WORDS,
     ENGLISH_SENTENCES,
     KANJI_SENTENCES

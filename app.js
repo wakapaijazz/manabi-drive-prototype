@@ -128,13 +128,14 @@
     const boss = state.number % 4 === 0;
     const revisit = state.mistakes.length > 0 && state.number % 4 === 0 && !boss;
     const q = revisit ? state.mistakes.shift() : window.StudyQuestions.generateQuestion({
-      subject:state.subject, topic:state.topic, grade:state.grade, recentIds:state.recent, boss
+      subject:state.subject, topic:state.topic, grade:state.grade, recentIds:state.recent, boss,
+      mathLevel: Math.min(window.StudyQuestions.MATH_LEVELS?.length || 8, state.streak + 1)
     });
     state.question = q;
     if (!revisit) state.recent = [...state.recent.slice(-16), q.id];
 
     el.qText.textContent = q.question;
-    el.qKind.textContent = q.tag || ({math:'さんすう',kanji:'かんじ',english:'えいご'}[state.subject]);
+    el.qKind.textContent = q.levelTag ? `レベル${q.level}：${q.levelTag}` : (q.tag || ({math:'さんすう',kanji:'かんじ',english:'えいご'}[state.subject]));
     el.qGrade.hidden = !q.gradeTag;
     if (!el.qGrade.hidden) el.qGrade.textContent = q.gradeTag;
     renderChoices(q);

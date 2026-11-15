@@ -5,6 +5,7 @@ const vm = require('node:vm');
 const context = {window: {}, Math};
 vm.runInNewContext(fs.readFileSync('questions.js', 'utf8'), context);
 const generateQuestion = context.window.StudyQuestions.generateQuestion;
+const mathLevels = context.window.StudyQuestions.MATH_LEVELS;
 
 for (const boss of [false, true]) {
   for (let i = 0; i < 5000; i++) {
@@ -16,6 +17,23 @@ for (const boss of [false, true]) {
     assert.ok(question.choices.includes(question.answer), 'clock choices must include the answer');
     if (question.visual?.type === 'clock' && question.question.includes('この とけいは')) {
       assert.equal(question.answer, `${question.visual.h}時${String(question.visual.m).padStart(2, '0')}分`, 'read-the-clock answer must match the displayed hands');
+    }
+  }
+}
+
+assert.equal(mathLevels.length, 8, 'the learning path should have eight math levels');
+for (const level of mathLevels) {
+  for (const boss of [false, true]) {
+    for (let i = 0; i < 250; i++) {
+      const question = generateQuestion({subject: 'math', topic: 'mix', mathLevel: level.level, boss});
+      assert.equal(question.level, level.level, 'mix questions must use the requested math level');
+      assert.equal(question.levelTag, level.label, 'math questions must expose their level label');
+      assert.ok(question.choices.includes(question.answer), 'levelled math choices must include the answer');
+      assert.equal(question.choices[question.correctIndex], question.answer, 'levelled math answer must match correctIndex');
+      if (level.type === 'divideRemainder') {
+        assert.match(question.answer, /^\d+ あまり \d+$/, 'remainder division answers must show quotient and remainder');
+      }
+      if (boss) assert.ok(question.choices.length >= 3, 'boss math questions should have at least three choices');
     }
   }
 }

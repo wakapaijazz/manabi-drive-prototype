@@ -4,7 +4,7 @@
   const $ = (id) => document.getElementById(id);
   const MAX_QUESTIONS = 10;
   const AUTO_ADVANCE_MS = 4000;
-  const ANSWER_LIMIT_MS = 10000;
+  const DEFAULT_ANSWER_LIMIT_MS = 10000;
   const TOPICS = {
     math: [
       ['mix', 'なんでも ミックス'],
@@ -243,7 +243,8 @@
 
   function startAnswerTimer() {
     clearAnswerTimer();
-    let remaining = ANSWER_LIMIT_MS;
+    const limitMs = Math.max(DEFAULT_ANSWER_LIMIT_MS, Math.min(20000, Number(state.question?.timeLimitSec || 10) * 1000));
+    let remaining = limitMs;
     answerLastTick = performance.now();
     const tick = () => {
       if (state.locked || el.finish.hidden === false) return;
@@ -252,7 +253,7 @@
       answerLastTick = now;
       const seconds = Math.max(0, Math.ceil(remaining / 1000));
       el.answerTime.textContent = seconds;
-      el.answerTimerFill.style.width = `${remaining / ANSWER_LIMIT_MS * 100}%`;
+      el.answerTimerFill.style.width = `${remaining / limitMs * 100}%`;
       el.answerTimer.classList.toggle('is-warning', remaining <= 4000);
       if (remaining <= 0) {
         answerTimer = null;
@@ -291,7 +292,7 @@
     el.feedback.classList.add('is-error');
     el.fIcon.textContent = '⏰';
     el.fTitle.textContent = 'タイムアップ！';
-    el.fText.textContent = `10びょう たったよ。${q.explanation}`;
+    el.fText.textContent = `${q.timeLimitSec || 10}びょう たったよ。${q.explanation}`;
     el.next.textContent = 'すぐ つぎへ →';
     el.progress.style.width = `${state.number / MAX_QUESTIONS * 100}%`;
     el.streak.textContent = state.streak;

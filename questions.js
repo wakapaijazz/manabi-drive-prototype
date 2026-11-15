@@ -266,7 +266,8 @@
   }
 
   function levelledMath(question, spec) {
-    return {...question, level:spec.level, levelTag:spec.label, mathType:spec.type};
+    const timeLimitSec = spec.level <= 2 ? 10 : spec.level <= 4 ? 15 : spec.level <= 6 ? 17 : 20;
+    return {...question, level:spec.level, levelTag:spec.label, mathType:spec.type, timeLimitSec};
   }
 
   function mathLevelQuestion(level = 1) {
@@ -441,12 +442,14 @@
         return twoChoices({id:`${e.id}-fill`, question:'文の □ に 入る かんじは どれ？', explanation:`文の □ に 入るのは「${e.target}」だよ。`}, e.target, e.fillWrong, {
           tag:'ぶんしょうの かんじ',
           gradeTag:`小学${e.grade}年生`,
+          timeLimitSec: e.grade === 1 ? 10 : e.grade === 2 ? 15 : 20,
           visual:{type:'sentence', text:prompt}
         });
       }
       return twoChoices({id:`${e.id}-reading`, question:`文の「${e.target}」は なんと よむ？`, explanation:`「${e.target}」は「${e.reading}」と よむよ。`}, e.reading, e.readingWrong, {
         tag:'ぶんしょうの よみ',
         gradeTag:`小学${e.grade}年生`,
+        timeLimitSec: e.grade === 1 ? 10 : e.grade === 2 ? 15 : 20,
         visual:{type:'sentence', text:e.text}
       });
     }
@@ -456,6 +459,7 @@
     return twoChoices({id:e.id, question:prompt, explanation:`「${e.word}」は「${e.answer}」だよ。`}, e.answer, e.wrong, {
       tag: kind === 'reading' ? 'かんじの よみ' : kind === 'writing' ? 'かんじの かきかた' : 'じゅくごの よみ',
       gradeTag: `小学${e.grade}年生`,
+      timeLimitSec: e.grade === 1 ? 10 : e.grade === 2 ? 15 : 20,
       visual: kind === 'writing' ? {type:'notebook'} : {type:'kanji', word:e.word}
     });
   }
@@ -492,10 +496,10 @@
       if (topic === 'mix') question = mathLevelQuestion(mathLevel);
       else {
         const kind = topic;
-        if (['addsub','multiply','divide'].includes(kind)) question = {...mathCalculation(kind), tag: {addsub:'たし算・ひき算',multiply:'かけ算',divide:'わり算'}[kind]};
+        if (['addsub','multiply','divide'].includes(kind)) question = {...mathCalculation(kind), tag: {addsub:'たし算・ひき算',multiply:'かけ算',divide:'わり算'}[kind], timeLimitSec:15};
         else if (kind === 'count') question = {...mathBlocks(), tag:'かずを かぞえる'};
-        else if (kind === 'compare') question = {...mathCompare(boss), tag:'くらべる'};
-        else question = {...mathClock(), tag:'とけい'};
+        else if (kind === 'compare') question = {...mathCompare(boss), tag:'くらべる', timeLimitSec:15};
+        else question = {...mathClock(), tag:'とけい', timeLimitSec:15};
       }
     } else if (subject === 'kanji') {
       question = kanjiQuestion(topic, Number(grade), recentIds);

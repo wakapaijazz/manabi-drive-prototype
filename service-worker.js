@@ -1,7 +1,7 @@
-const CACHE = 'manabi-drive-v10-levels';
+const CACHE = 'manabi-drive-v11-timer';
 const RESOURCES = [
-  './', './index.html', './style.css?v=levels1', './questions.js?v=levels1', './app.js?v=levels1',
-  './vendor/three.min.js', './road-geometry.js?v=levels1', './drive-3d.js?v=levels1',
+  './', './index.html', './style.css?v=timer1', './questions.js?v=timer1', './app.js?v=timer1',
+  './vendor/three.min.js', './road-geometry.js?v=timer1', './drive-3d.js?v=timer1',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'
 ];
 self.addEventListener('install', (event) => {

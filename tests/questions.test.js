@@ -28,6 +28,8 @@ for (const level of mathLevels) {
       const question = generateQuestion({subject: 'math', topic: 'mix', mathLevel: level.level, boss});
       assert.equal(question.level, level.level, 'mix questions must use the requested math level');
       assert.equal(question.levelTag, level.label, 'math questions must expose their level label');
+      const expectedTime = level.level <= 2 ? 10 : level.level <= 4 ? 15 : level.level <= 6 ? 17 : 20;
+      assert.equal(question.timeLimitSec, expectedTime, 'math difficulty should set the expected time limit');
       assert.ok(question.choices.includes(question.answer), 'levelled math choices must include the answer');
       assert.equal(question.choices[question.correctIndex], question.answer, 'levelled math answer must match correctIndex');
       if (level.type === 'divideRemainder') {
@@ -36,6 +38,13 @@ for (const level of mathLevels) {
       if (boss) assert.ok(question.choices.length >= 3, 'boss math questions should have at least three choices');
     }
   }
+}
+
+for (const grade of [1, 2, 3]) {
+  const question = generateQuestion({subject: 'kanji', topic: 'mix', grade});
+  const actualGrade = Number(question.gradeTag.match(/小学(\d)年生/)[1]);
+  const expectedTime = actualGrade === 1 ? 10 : actualGrade === 2 ? 15 : 20;
+  assert.equal(question.timeLimitSec, expectedTime, 'kanji grade should set the expected time limit');
 }
 
 let sentenceFillCount = 0;

@@ -45,7 +45,9 @@ HTTPSでアクセスするとPWAとしてインストールし、キャッシュ
 
 ## 問題を増やす
 
-`questions.js` の `KANJI`, `ENGLISH_WORDS`, `ENGLISH_SENTENCES` 配列に追加してください。
+`questions.js` の `KANJI`, `KANJI_SENTENCES`, `ENGLISH_WORDS`, `ENGLISH_SENTENCES` 配列に追加してください。
+
+現在の問題ストックは、漢字100問、漢字文章100文、英単語100問、英文100文です。漢字は単漢字の読み・書き、熟語に加えて、同じ漢字を別の文脈で読む問題も含みます。英文は身近な名詞・色・数・動作・学校生活を中心に、英語から日本語、日本語から英語の両方向で出題します。
 
 漢字の例：
 

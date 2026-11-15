@@ -6,6 +6,18 @@ const context = {window: {}, Math};
 vm.runInNewContext(fs.readFileSync('questions.js', 'utf8'), context);
 const generateQuestion = context.window.StudyQuestions.generateQuestion;
 const mathLevels = context.window.StudyQuestions.MATH_LEVELS;
+const {KANJI, KANJI_SENTENCES, ENGLISH_WORDS, ENGLISH_SENTENCES} = context.window.StudyQuestions;
+
+assert.equal(KANJI.length, 100, 'the kanji question bank should contain 100 entries');
+assert.equal(KANJI_SENTENCES.length, 100, 'the kanji sentence bank should contain 100 entries');
+assert.equal(ENGLISH_WORDS.length, 100, 'the English word bank should contain 100 entries');
+assert.equal(ENGLISH_SENTENCES.length, 100, 'the English sentence bank should contain 100 entries');
+const allQuestionIds = [...KANJI, ...KANJI_SENTENCES].map(entry => entry.id);
+assert.equal(new Set(allQuestionIds).size, allQuestionIds.length, 'kanji question IDs should be unique');
+assert.equal(new Set(ENGLISH_WORDS.map(entry => entry.word)).size, ENGLISH_WORDS.length, 'English words should be unique');
+for (const entry of KANJI_SENTENCES) {
+  assert.ok(entry.text.includes(`【${entry.target}】`), `sentence must contain its target: ${entry.id}`);
+}
 
 for (const boss of [false, true]) {
   for (let i = 0; i < 5000; i++) {

@@ -26,6 +26,13 @@
       ['mix', 'なんでも ミックス'],
       ['words', 'はじめての えいたんご'],
       ['sentences', 'かんたんな えいぶん']
+    ],
+    juniorEnglish: [
+      ['mix', '中学英語 ミックス'],
+      ['words', '中学英単語'],
+      ['idioms', '熟語・連語'],
+      ['dialogue', '会話文'],
+      ['fill', '空所補充']
     ]
   };
 
@@ -135,7 +142,7 @@
     if (!revisit) state.recent = [...state.recent.slice(-16), q.id];
 
     el.qText.textContent = q.question;
-    el.qKind.textContent = q.levelTag ? `レベル${q.level}：${q.levelTag}` : (q.tag || ({math:'さんすう',kanji:'かんじ',english:'えいご'}[state.subject]));
+    el.qKind.textContent = q.levelTag ? `レベル${q.level}：${q.levelTag}` : (q.tag || ({math:'さんすう',kanji:'かんじ',english:'えいご',juniorEnglish:'中学英語'}[state.subject]));
     el.qGrade.hidden = !q.gradeTag;
     if (!el.qGrade.hidden) el.qGrade.textContent = q.gradeTag;
     renderChoices(q);
@@ -489,6 +496,13 @@
   function renderVisual(v, parent) {
     if (v.type === 'blocks') { parent.append(makeBlocks(v.count)); return; }
     if (v.type === 'emoji') { parent.append(makeNode('span','visual-emoji',v.emoji)); return; }
+    if (v.type === 'english-word') { parent.append(makeNode('div','visual-english-word',v.word)); return; }
+    if (v.type === 'idiom') {
+      const box = makeNode('div','visual-idiom');
+      box.append(makeNode('strong','',v.phrase), makeNode('span','',v.example));
+      parent.append(box);
+      return;
+    }
     if (v.type === 'kanji') { parent.append(makeNode('div','visual-kanji',v.word)); return; }
     if (v.type === 'sentence') { parent.append(makeNode('div','visual-sentence',v.text)); return; }
     if (v.type === 'notebook') { parent.append(makeNode('div','visual-notebook','✏️')); return; }

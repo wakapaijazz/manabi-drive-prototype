@@ -98,6 +98,10 @@ button:disabled { cursor: default; }
 .visual-tiles.compact { grid-template-columns: repeat(5, 13px); padding: 5px; gap: 2px; }
 .visual-tiles.compact .visual-tile { width: 13px; height: 13px; border-width: 1px; border-radius: 3px; }
 .visual-emoji { font-size: 75px; line-height: 1.1; filter: drop-shadow(0 10px 11px #6e9ad42e); }
+.visual-english-word { min-width: 130px; padding: 14px 16px; border: 2px solid #c8def7; border-radius: 14px; background: #fff; color: #286ac9; font-size: clamp(18px, 2.2vw, 28px); font-weight: 950; text-align: center; box-shadow: 0 5px 12px #5a8cc21a; }
+.visual-idiom { display: grid; gap: 5px; max-width: 270px; padding: 12px 15px; border: 2px solid #d9c9f5; border-radius: 14px; background: linear-gradient(145deg, #fff, #f7f0ff); color: #5f4697; text-align: center; box-shadow: 0 5px 12px #7252a51a; }
+.visual-idiom strong { font-size: clamp(17px, 2vw, 24px); }
+.visual-idiom span { color: #8977a9; font-size: 11px; font-weight: 800; }
 .visual-kanji { min-width: 94px; text-align: center; font-size: 61px; line-height: 1.4; color: #2e69c4; font-weight: 900; background: white; border: 3px dashed #afd3fd; border-radius: 16px; padding: 0 8px; }
 .visual-sentence { max-width: 285px; padding: 13px 15px; border: 2px solid #c8def7; border-radius: 14px; background: #fff; color: #315578; font-size: clamp(15px, 1.8vw, 21px); font-weight: 900; line-height: 1.65; text-align: center; box-shadow: 0 5px 12px #5a8cc21a; }
 .visual-notebook { display: grid; place-items: center; background: #fff; color: #4b91d2; border-radius: 17px; font-size: 72px; line-height: 1; width: 94px; height: 94px; box-shadow: 0 4px 14px #7ba7d21d; }
@@ -258,8 +262,8 @@ kbd { background: #f1f4f9; border: 1px solid #e1e7f0; border-radius: 4px; paddin
   .main-grid { grid-template-columns: 1fr; padding: 8px 14px 15px; gap: 11px; }
   .sidebar { padding: 15px; }
   .sidebar-eyebrow, .sidebar h1, .sidebar-note, .sidebar-tip { display: none; }
-  .subject-tabs { grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .subject-tab { flex-direction: row; gap: 5px; justify-content: center; padding: 10px 4px; font-size: 13px; min-height: 50px; border-radius: 11px; }
+  .subject-tabs { grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .subject-tab { flex-direction: column; gap: 2px; justify-content: center; padding: 7px 3px; font-size: 12px; min-height: 58px; border-radius: 11px; }
   .subject-icon { width: auto; font-size: 20px; }
   .sidebar .field-label { margin: 13px 0 7px; }
   .restart-button { margin-top: 10px; padding: 10px; }
@@ -277,7 +281,7 @@ kbd { background: #f1f4f9; border: 1px solid #e1e7f0; border-radius: 4px; paddin
   .icon-button span { display: none; }
   .main-grid { padding: 5px 8px 12px; gap: 9px; }
   .sidebar { padding: 10px 11px; border-radius: 17px; }
-  .subject-tab { font-size: 13px; min-height: 44px; padding: 7px 2px; }
+  .subject-tab { font-size: 10px; min-height: 53px; padding: 5px 1px; }
   .subject-icon { font-size: 17px; }
   .sidebar .field-label { margin-top: 9px; }
   .select-wrap select { padding: 9px 30px 9px 11px; }

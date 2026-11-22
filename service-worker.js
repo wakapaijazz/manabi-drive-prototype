@@ -1,7 +1,7 @@
-const CACHE = 'manabi-drive-v12-content100';
+const CACHE = 'manabi-drive-v13-junior-english';
 const RESOURCES = [
-  './', './index.html', './style.css?v=content100', './questions.js?v=content100', './app.js?v=content100',
-  './vendor/three.min.js', './road-geometry.js?v=content100', './drive-3d.js?v=content100',
+  './', './index.html', './style.css?v=juniorEnglish1', './questions.js?v=juniorEnglish1', './app.js?v=juniorEnglish1',
+  './vendor/three.min.js', './road-geometry.js?v=juniorEnglish1', './drive-3d.js?v=juniorEnglish1',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'
 ];
 self.addEventListener('install', (event) => {

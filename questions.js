@@ -447,6 +447,146 @@
     { english:'The desk is in the room.', japanese:'つくえは へやの なかに あります。' }
   ];
 
+  // 中学英語コース：単語・熟語／連語・会話文・文法の空所補充
+  const JUNIOR_ENGLISH_WORDS = [
+    {word:'important', meaning:'重要な'}, {word:'different', meaning:'異なる'},
+    {word:'difficult', meaning:'難しい'}, {word:'easy', meaning:'簡単な'},
+    {word:'interesting', meaning:'おもしろい'}, {word:'famous', meaning:'有名な'},
+    {word:'kind', meaning:'親切な'}, {word:'busy', meaning:'忙しい'},
+    {word:'early', meaning:'早い・早く'}, {word:'late', meaning:'遅い・遅く'},
+    {word:'usually', meaning:'ふつうは'}, {word:'always', meaning:'いつも'},
+    {word:'sometimes', meaning:'ときどき'}, {word:'together', meaning:'一緒に'},
+    {word:'before', meaning:'〜の前に'}, {word:'after', meaning:'〜の後に'},
+    {word:'because', meaning:'なぜなら・〜なので'}, {word:'during', meaning:'〜の間'},
+    {word:'around', meaning:'〜の周りに'}, {word:'near', meaning:'近くに'},
+    {word:'strong', meaning:'強い'}, {word:'healthy', meaning:'健康な'},
+    {word:'favorite', meaning:'お気に入りの'}, {word:'future', meaning:'未来・将来'},
+    {word:'problem', meaning:'問題'}, {word:'answer', meaning:'答え'},
+    {word:'question', meaning:'質問・問題'}, {word:'language', meaning:'言語'},
+    {word:'culture', meaning:'文化'}, {word:'science', meaning:'科学'},
+    {word:'history', meaning:'歴史'}, {word:'subject', meaning:'教科'},
+    {word:'library', meaning:'図書館'}, {word:'festival', meaning:'祭り'},
+    {word:'student', meaning:'生徒・学生'}, {word:'teacher', meaning:'先生'},
+    {word:'message', meaning:'伝言・メッセージ'}, {word:'practice', meaning:'練習'},
+    {word:'remember', meaning:'覚えている・思い出す'}, {word:'forget', meaning:'忘れる'},
+    {word:'decide', meaning:'決める'}, {word:'explain', meaning:'説明する'},
+    {word:'invite', meaning:'招待する'}, {word:'borrow', meaning:'借りる'},
+    {word:'lend', meaning:'貸す'}, {word:'arrive', meaning:'到着する'},
+    {word:'leave', meaning:'出発する・去る'}, {word:'travel', meaning:'旅行する'},
+    {word:'discover', meaning:'発見する'}, {word:'choose', meaning:'選ぶ'}
+  ];
+
+  const JUNIOR_ENGLISH_IDIOMS = [
+    {phrase:'look at', meaning:'〜を見る', example:'Look at this picture.'},
+    {phrase:'listen to', meaning:'〜を聞く', example:'Please listen to me.'},
+    {phrase:'wait for', meaning:'〜を待つ', example:'I will wait for you.'},
+    {phrase:'be good at', meaning:'〜が得意である', example:'She is good at tennis.'},
+    {phrase:'be interested in', meaning:'〜に興味がある', example:'I am interested in science.'},
+    {phrase:'take care of', meaning:'〜の世話をする', example:'He takes care of his dog.'},
+    {phrase:'get up', meaning:'起きる', example:'I get up at seven.'},
+    {phrase:'go out', meaning:'外出する', example:'We go out on Sundays.'},
+    {phrase:'come from', meaning:'〜の出身である', example:'I come from Japan.'},
+    {phrase:'have to', meaning:'〜しなければならない', example:'I have to do my homework.'},
+    {phrase:'want to', meaning:'〜したい', example:'I want to visit Kyoto.'},
+    {phrase:'try to', meaning:'〜しようとする', example:'Try to speak English.'},
+    {phrase:'help with', meaning:'〜を手伝う', example:'Can you help me with this?'},
+    {phrase:'ask for', meaning:'〜を求める・頼む', example:'I asked for some water.'},
+    {phrase:'talk about', meaning:'〜について話す', example:'We talked about music.'},
+    {phrase:'think of', meaning:'〜を考える・思いつく', example:'What do you think of it?'},
+    {phrase:'each other', meaning:'お互いに', example:'We help each other.'},
+    {phrase:'a lot of', meaning:'たくさんの', example:'There are a lot of books.'},
+    {phrase:'in front of', meaning:'〜の前に', example:'The bus is in front of the school.'},
+    {phrase:'next to', meaning:'〜の隣に', example:'I sit next to Ken.'},
+    {phrase:'on the way to', meaning:'〜へ行く途中で', example:'I met her on the way to school.'},
+    {phrase:'at first', meaning:'最初は', example:'At first, English was difficult.'},
+    {phrase:'for example', meaning:'例えば', example:'I like sports, for example, soccer.'},
+    {phrase:'of course', meaning:'もちろん', example:'Of course, I can help you.'},
+    {phrase:'by the way', meaning:'ところで', example:'By the way, where is Tom?'},
+    {phrase:'in the future', meaning:'将来', example:'I want to be a pilot in the future.'},
+    {phrase:'at home', meaning:'家で・家に', example:'I study at home.'},
+    {phrase:'right now', meaning:'今すぐ・ちょうど今', example:'I am busy right now.'},
+    {phrase:'once a week', meaning:'週に一度', example:'I play tennis once a week.'},
+    {phrase:'kind of', meaning:'少し・〜のようなもの', example:'It is kind of difficult.'},
+    {phrase:'be afraid of', meaning:'〜を恐れている', example:'She is afraid of dogs.'},
+    {phrase:'be proud of', meaning:'〜を誇りに思う', example:'I am proud of my team.'}
+  ];
+
+  const JUNIOR_ENGLISH_DIALOGUES = [
+    {id:'jed-01', prompt:'A: How are you?\nB: (       )', answer:'I am fine, thank you.', wrong:['I am from Japan.','It is Monday.'], japanese:'元気ですか。—元気です、ありがとう。'},
+    {id:'jed-02', prompt:'A: What time is it?\nB: (       )', answer:"It is seven o'clock.", wrong:['It is sunny.','I am seven years old.'], japanese:'何時ですか。—7時です。'},
+    {id:'jed-03', prompt:'A: What day is it today?\nB: (       )', answer:'It is Monday.', wrong:['It is seven o’clock.','I like Monday.'], japanese:'今日は何曜日ですか。—月曜日です。'},
+    {id:'jed-04', prompt:'A: Where are you from?\nB: (       )', answer:'I am from Japan.', wrong:['I am a student.','I go to school.'], japanese:'どこの出身ですか。—日本出身です。'},
+    {id:'jed-05', prompt:'A: What do you do after school?\nB: (       )', answer:'I play soccer.', wrong:['I am at school.','It is after five.'], japanese:'放課後は何をしますか。—サッカーをします。'},
+    {id:'jed-06', prompt:'A: Would you like some juice?\nB: (       )', answer:'Yes, please.', wrong:['Yes, I do.','No, I am not.'], japanese:'ジュースはいかがですか。—はい、お願いします。'},
+    {id:'jed-07', prompt:'A: Can I use your pen?\nB: (       )', answer:'Sure.', wrong:['I use a pen.','It is a pen.'], japanese:'あなたのペンを使ってもいいですか。—もちろん。'},
+    {id:'jed-08', prompt:'A: Could you help me?\nB: (       )', answer:'Of course.', wrong:['I helped you yesterday.','You are helpful.'], japanese:'手伝ってくれますか。—もちろん。'},
+    {id:'jed-09', prompt:'A: How much is this?\nB: (       )', answer:'It is five dollars.', wrong:['It is five o’clock.','I have five books.'], japanese:'これはいくらですか。—5ドルです。'},
+    {id:'jed-10', prompt:'A: What are you doing?\nB: (       )', answer:'I am studying English.', wrong:['I study at school.','English is easy.'], japanese:'何をしていますか。—英語を勉強しています。'},
+    {id:'jed-11', prompt:'A: What did you do yesterday?\nB: (       )', answer:'I visited my grandmother.', wrong:['I visit her tomorrow.','I am at home.'], japanese:'昨日何をしましたか。—祖母を訪ねました。'},
+    {id:'jed-12', prompt:'A: What will you do tomorrow?\nB: (       )', answer:'I will go shopping.', wrong:['I went shopping.','I like shopping.'], japanese:'明日は何をしますか。—買い物に行きます。'},
+    {id:'jed-13', prompt:'A: Do you like music?\nB: (       )', answer:'Yes, I do.', wrong:['Yes, I am.','Yes, I can.'], japanese:'音楽が好きですか。—はい、好きです。'},
+    {id:'jed-14', prompt:'A: What sport do you like?\nB: (       )', answer:'I like basketball.', wrong:['I play after school.','It is a sport.'], japanese:'どんなスポーツが好きですか。—バスケットボールが好きです。'},
+    {id:'jed-15', prompt:'A: Which do you prefer, tea or coffee?\nB: (       )', answer:'I prefer tea.', wrong:['I drink it every day.','It is in the kitchen.'], japanese:'紅茶とコーヒーではどちらが好きですか。—紅茶のほうが好きです。'},
+    {id:'jed-16', prompt:'A: Why are you late?\nB: (       )', answer:'Because I missed the bus.', wrong:['I am late every day.','The bus is blue.'], japanese:'なぜ遅れたのですか。—バスに乗り遅れたからです。'},
+    {id:'jed-17', prompt:'A: How long does it take?\nB: (       )', answer:'It takes twenty minutes.', wrong:['It is twenty meters.','I take the train.'], japanese:'どのくらい時間がかかりますか。—20分かかります。'},
+    {id:'jed-18', prompt:'A: How often do you practice?\nB: (       )', answer:'Twice a week.', wrong:['For two weeks.','At two o’clock.'], japanese:'どのくらいの頻度で練習しますか。—週に2回です。'},
+    {id:'jed-19', prompt:'A: Who is that boy?\nB: (       )', answer:'He is my brother.', wrong:['He is over there.','He likes boys.'], japanese:'あの男の子は誰ですか。—私の兄弟です。'},
+    {id:'jed-20', prompt:'A: Whose bag is this?\nB: (       )', answer:'It is mine.', wrong:['It is a bag.','I have a bag.'], japanese:'これは誰のかばんですか。—私のものです。'},
+    {id:'jed-21', prompt:'A: What does this word mean?\nB: (       )', answer:'It means important.', wrong:['It is an English word.','I remember the word.'], japanese:'この単語はどういう意味ですか。—「重要な」という意味です。'},
+    {id:'jed-22', prompt:'A: May I come in?\nB: (       )', answer:'Yes, come in.', wrong:['Yes, I came in.','I am in the room.'], japanese:'入ってもいいですか。—はい、どうぞ。'},
+    {id:'jed-23', prompt:'A: Please pass me the salt.\nB: (       )', answer:'Here you are.', wrong:['I like salt.','It is salty.'], japanese:'塩を取ってください。—はい、どうぞ。'},
+    {id:'jed-24', prompt:'A: Nice to meet you.\nB: (       )', answer:'Nice to meet you, too.', wrong:['Nice to see you yesterday.','I meet my friend.'], japanese:'はじめまして。—こちらこそ、はじめまして。'},
+    {id:'jed-25', prompt:'A: I am sorry.\nB: (       )', answer:'That is all right.', wrong:['I am sorry, too.','It is right there.'], japanese:'ごめんなさい。—大丈夫です。'},
+    {id:'jed-26', prompt:'A: Congratulations!\nB: (       )', answer:'Thank you.', wrong:['Congratulations to you.','You are welcome.'], japanese:'おめでとう。—ありがとう。'},
+    {id:'jed-27', prompt:'A: Have a nice weekend.\nB: (       )', answer:'You, too.', wrong:['It is the weekend.','I have a weekend.'], japanese:'よい週末を。—あなたも。'},
+    {id:'jed-28', prompt:'A: Let’s meet at three.\nB: (       )', answer:'See you then.', wrong:['It is three o’clock now.','I meet you yesterday.'], japanese:'3時に会いましょう。—では、その時に。'},
+    {id:'jed-29', prompt:'A: I have a headache.\nB: (       )', answer:'You should see a doctor.', wrong:['I have a head.','The doctor is busy.'], japanese:'頭が痛いです。—医者に診てもらうべきです。'},
+    {id:'jed-30', prompt:'A: Do you have any plans?\nB: (       )', answer:'I am going to study.', wrong:['I planned it yesterday.','It is a good plan.'], japanese:'何か予定がありますか。—勉強するつもりです。'}
+  ];
+
+  const JUNIOR_ENGLISH_FILLINS = [
+    {id:'jef-01', sentence:'I ___ tennis every Saturday.', answer:'play', wrong:['plays','playing'], japanese:'私は毎週土曜日にテニスをします。'},
+    {id:'jef-02', sentence:'She ___ to school by bus.', answer:'goes', wrong:['go','going'], japanese:'彼女はバスで学校へ行きます。'},
+    {id:'jef-03', sentence:'They ___ a movie last night.', answer:'watched', wrong:['watch','watching'], japanese:'彼らは昨夜映画を見ました。'},
+    {id:'jef-04', sentence:'We ___ English now.', answer:'are studying', wrong:['study','studied'], japanese:'私たちは今英語を勉強しています。'},
+    {id:'jef-05', sentence:'He ___ a new bike yesterday.', answer:'bought', wrong:['buys','buying'], japanese:'彼は昨日新しい自転車を買いました。'},
+    {id:'jef-06', sentence:'I have ___ books.', answer:'two', wrong:['too','to'], japanese:'私は本を2冊持っています。'},
+    {id:'jef-07', sentence:'There ___ a cat under the table.', answer:'is', wrong:['are','be'], japanese:'テーブルの下に猫が1匹います。'},
+    {id:'jef-08', sentence:'There ___ many students in the room.', answer:'are', wrong:['is','be'], japanese:'部屋にはたくさんの生徒がいます。'},
+    {id:'jef-09', sentence:'My brother is ___ than me.', answer:'taller', wrong:['tall','tallest'], japanese:'私の兄は私より背が高いです。'},
+    {id:'jef-10', sentence:'This is the ___ movie I have seen.', answer:'best', wrong:['good','better'], japanese:'これは私が見た中で最高の映画です。'},
+    {id:'jef-11', sentence:'I ___ visit Kyoto next week.', answer:'will', wrong:['was','did'], japanese:'私は来週京都を訪れるつもりです。'},
+    {id:'jef-12', sentence:'You ___ wear a helmet.', answer:'must', wrong:['may','did'], japanese:'あなたはヘルメットをかぶらなければなりません。'},
+    {id:'jef-13', sentence:'I want ___ a doctor.', answer:'to be', wrong:['be','being'], japanese:'私は医者になりたいです。'},
+    {id:'jef-14', sentence:'Thank you ___ your help.', answer:'for', wrong:['to','with'], japanese:'助けてくれてありがとう。'},
+    {id:'jef-15', sentence:'I am interested ___ music.', answer:'in', wrong:['on','at'], japanese:'私は音楽に興味があります。'},
+    {id:'jef-16', sentence:'This book is ___ than that one.', answer:'more interesting', wrong:['interesting','most interesting'], japanese:'この本はあの本よりおもしろいです。'},
+    {id:'jef-17', sentence:'If it ___ tomorrow, we will stay home.', answer:'rains', wrong:['rain','rained'], japanese:'もし明日雨が降ったら、家にいます。'},
+    {id:'jef-18', sentence:'When I ___ home, I do my homework.', answer:'come', wrong:['comes','came'], japanese:'家に帰ると、宿題をします。'},
+    {id:'jef-19', sentence:'I have ___ seen this movie.', answer:'never', wrong:['ever','always'], japanese:'私はこの映画を一度も見たことがありません。'},
+    {id:'jef-20', sentence:'Have you ___ been to Osaka?', answer:'ever', wrong:['never','always'], japanese:'あなたは大阪へ行ったことがありますか。'},
+    {id:'jef-21', sentence:'Could you ___ me?', answer:'help', wrong:['helped','helping'], japanese:'私を助けてくれますか。'},
+    {id:'jef-22', sentence:'Let’s ___ soccer.', answer:'play', wrong:['plays','playing'], japanese:'サッカーをしましょう。'},
+    {id:'jef-23', sentence:'Would you like ___ tea?', answer:'some', wrong:['any','many'], japanese:'紅茶はいかがですか。'},
+    {id:'jef-24', sentence:'I am going ___ my grandmother.', answer:'to visit', wrong:['visit','visited'], japanese:'私は祖母を訪ねるつもりです。'},
+    {id:'jef-25', sentence:'He is good ___ math.', answer:'at', wrong:['in','on'], japanese:'彼は数学が得意です。'},
+    {id:'jef-26', sentence:'This is the girl ___ won the race.', answer:'who', wrong:['which','where'], japanese:'こちらが競走で勝った女の子です。'},
+    {id:'jef-27', sentence:'The book ___ I borrowed is new.', answer:'that', wrong:['who','where'], japanese:'私が借りた本は新しいです。'},
+    {id:'jef-28', sentence:'English is ___ in many countries.', answer:'spoken', wrong:['speak','speaking'], japanese:'英語は多くの国で話されています。'},
+    {id:'jef-29', sentence:'The window ___ by Ken was broken.', answer:'opened', wrong:['opening','open'], japanese:'ケンによって開けられた窓は壊れていました。'},
+    {id:'jef-30', sentence:'I went to the library ___ study.', answer:'to', wrong:['for','at'], japanese:'私は勉強するために図書館へ行きました。'},
+    {id:'jef-31', sentence:'She has lived here ___ three years.', answer:'for', wrong:['since','during'], japanese:'彼女はここに3年間住んでいます。'},
+    {id:'jef-32', sentence:'We have known each other ___ 2020.', answer:'since', wrong:['for','from'], japanese:'私たちは2020年からお互いを知っています。'},
+    {id:'jef-33', sentence:'You should ___ early.', answer:'leave', wrong:['leaves','left'], japanese:'あなたは早く出発すべきです。'},
+    {id:'jef-34', sentence:'Do not ___ late.', answer:'be', wrong:['is','are'], japanese:'遅れてはいけません。'},
+    {id:'jef-35', sentence:'It is important ___ practice.', answer:'to', wrong:['practicing','practiced'], japanese:'練習することは大切です。'},
+    {id:'jef-36', sentence:'I was tired, ___ I went to bed.', answer:'so', wrong:['but','or'], japanese:'私は疲れていたので、寝ました。'},
+    {id:'jef-37', sentence:'He can ___ very fast.', answer:'run', wrong:['runs','running'], japanese:'彼はとても速く走ることができます。'},
+    {id:'jef-38', sentence:'I enjoy ___ books.', answer:'reading', wrong:['read','to read'], japanese:'私は本を読むことを楽しみます。'},
+    {id:'jef-39', sentence:'My mother made me ___ my room.', answer:'clean', wrong:['cleaned','cleaning'], japanese:'母は私に部屋を掃除させました。'},
+    {id:'jef-40', sentence:'We need ___ the answer.', answer:'find', wrong:['finding','found'], japanese:'私たちは答えを見つける必要があります。'}
+  ];
+
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
   const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
   const coin = () => Math.random() < 0.5;
@@ -529,6 +669,17 @@
         else if (isEnglish) pool.push(...ENGLISH_WORDS.map(entry => entry.word));
         else if (q.speech && q.speech.includes(' ')) pool.push(...ENGLISH_SENTENCES.map(entry => entry.japanese));
         else pool.push(...ENGLISH_WORDS.map(entry => entry.meaning));
+      } else if (subject === 'juniorEnglish') {
+        const isEnglish = /^[A-Za-z]/.test(correctText);
+        if (q.tag?.includes('英単語')) {
+          pool.push(...(isEnglish ? JUNIOR_ENGLISH_WORDS.map(entry => entry.word) : JUNIOR_ENGLISH_WORDS.map(entry => entry.meaning)));
+        } else if (q.tag?.includes('熟語')) {
+          pool.push(...(isEnglish ? JUNIOR_ENGLISH_IDIOMS.map(entry => entry.phrase) : JUNIOR_ENGLISH_IDIOMS.map(entry => entry.meaning)));
+        } else if (q.tag?.includes('空所')) {
+          pool.push(...JUNIOR_ENGLISH_FILLINS.map(entry => entry.answer));
+        } else {
+          pool.push(...JUNIOR_ENGLISH_DIALOGUES.map(entry => entry.answer));
+        }
       }
     }
 
@@ -811,6 +962,48 @@
     return twoChoices({id:e.id, question:`「${e.english}」の いみは？`, explanation:`${e.english} = ${e.japanese}`, }, e.japanese, other.japanese, {speech:e.english, tag:'えいぶん'});
   }
 
+  function juniorEnglishQuestion(topic, recentIds) {
+    const kind = topic === 'mix' ? pick(['words', 'idioms', 'dialogue', 'fill']) : topic;
+    if (kind === 'words') {
+      const entries = JUNIOR_ENGLISH_WORDS.map(entry => ({...entry, id:`je-word-${entry.word}`}));
+      const e = freshItem(entries, recentIds);
+      const other = pick(entries.filter(entry => entry.word !== e.word));
+      const reverse = coin();
+      if (reverse) {
+        return twoChoices({id:e.id, question:`「${e.meaning}」を えいごで？`, explanation:`「${e.meaning}」は ${e.word} だよ。`}, e.word, other.word, {
+          tag:'中学英語・英単語', timeLimitSec:15, speech:e.word, visual:{type:'english-word', word:e.word}
+        });
+      }
+      return twoChoices({id:e.id, question:`「${e.word}」の いみは？`, explanation:`${e.word} は「${e.meaning}」だよ。`}, e.meaning, other.meaning, {
+        tag:'中学英語・英単語', timeLimitSec:15, speech:e.word, visual:{type:'english-word', word:e.word}
+      });
+    }
+    if (kind === 'idioms') {
+      const entries = JUNIOR_ENGLISH_IDIOMS.map(entry => ({...entry, id:`je-idiom-${entry.phrase}`}));
+      const e = freshItem(entries, recentIds);
+      const other = pick(entries.filter(entry => entry.phrase !== e.phrase));
+      const reverse = coin();
+      if (reverse) {
+        return twoChoices({id:e.id, question:`「${e.meaning}」を あらわす じゅくごは？`, explanation:`「${e.phrase}」は「${e.meaning}」という いみだよ。`}, e.phrase, other.phrase, {
+          tag:'中学英語・熟語', timeLimitSec:15, speech:e.phrase, visual:{type:'idiom', phrase:e.phrase, example:e.example}
+        });
+      }
+      return twoChoices({id:e.id, question:`「${e.phrase}」の いみは？`, explanation:`${e.phrase} は「${e.meaning}」だよ。`}, e.meaning, other.meaning, {
+        tag:'中学英語・熟語', timeLimitSec:15, speech:e.phrase, visual:{type:'idiom', phrase:e.phrase, example:e.example}
+      });
+    }
+    if (kind === 'dialogue') {
+      const e = freshItem(JUNIOR_ENGLISH_DIALOGUES, recentIds);
+      return twoChoices({id:e.id, question:'会話の（　）に 入る ことばは？', explanation:e.japanese}, e.answer, pick(e.wrong), {
+        tag:'中学英語・会話文', timeLimitSec:20, speech:e.answer, visual:{type:'sentence', text:e.prompt}
+      });
+    }
+    const e = freshItem(JUNIOR_ENGLISH_FILLINS, recentIds);
+    return twoChoices({id:e.id, question:'文の 空らんに 入る えいごは？', explanation:`${e.japanese} 正解は「${e.answer}」だよ。`}, e.answer, pick(e.wrong), {
+      tag:'中学英語・空所補充', timeLimitSec:20, speech:e.sentence.replace('___', e.answer), visual:{type:'sentence', text:e.sentence.replace('___', '□')}
+    });
+  }
+
   function generateQuestion({subject='math', topic='mix', grade=3, recentIds=[], boss=false, mathLevel=1}={}) {
     let question;
     if (subject === 'math') {
@@ -824,6 +1017,8 @@
       }
     } else if (subject === 'kanji') {
       question = kanjiQuestion(topic, Number(grade), recentIds);
+    } else if (subject === 'juniorEnglish') {
+      question = juniorEnglishQuestion(topic, recentIds);
     } else {
       question = englishQuestion(topic, recentIds);
     }
@@ -838,6 +1033,10 @@
     MATH_LEVELS,
     ENGLISH_WORDS,
     ENGLISH_SENTENCES,
-    KANJI_SENTENCES
+    KANJI_SENTENCES,
+    JUNIOR_ENGLISH_WORDS,
+    JUNIOR_ENGLISH_IDIOMS,
+    JUNIOR_ENGLISH_DIALOGUES,
+    JUNIOR_ENGLISH_FILLINS
   };
 })();

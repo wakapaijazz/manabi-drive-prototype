@@ -6,12 +6,19 @@ const context = {window: {}, Math};
 vm.runInNewContext(fs.readFileSync('questions.js', 'utf8'), context);
 const generateQuestion = context.window.StudyQuestions.generateQuestion;
 const mathLevels = context.window.StudyQuestions.MATH_LEVELS;
-const {KANJI, KANJI_SENTENCES, ENGLISH_WORDS, ENGLISH_SENTENCES} = context.window.StudyQuestions;
+const {
+  KANJI, KANJI_SENTENCES, ENGLISH_WORDS, ENGLISH_SENTENCES,
+  JUNIOR_ENGLISH_WORDS, JUNIOR_ENGLISH_IDIOMS, JUNIOR_ENGLISH_DIALOGUES, JUNIOR_ENGLISH_FILLINS
+} = context.window.StudyQuestions;
 
 assert.equal(KANJI.length, 100, 'the kanji question bank should contain 100 entries');
 assert.equal(KANJI_SENTENCES.length, 100, 'the kanji sentence bank should contain 100 entries');
 assert.equal(ENGLISH_WORDS.length, 100, 'the English word bank should contain 100 entries');
 assert.equal(ENGLISH_SENTENCES.length, 100, 'the English sentence bank should contain 100 entries');
+assert.ok(JUNIOR_ENGLISH_WORDS.length >= 40, 'junior English should have a substantial word bank');
+assert.ok(JUNIOR_ENGLISH_IDIOMS.length >= 30, 'junior English should have a substantial idiom bank');
+assert.ok(JUNIOR_ENGLISH_DIALOGUES.length >= 25, 'junior English should have a substantial dialogue bank');
+assert.ok(JUNIOR_ENGLISH_FILLINS.length >= 35, 'junior English should have a substantial fill-in bank');
 const allQuestionIds = [...KANJI, ...KANJI_SENTENCES].map(entry => entry.id);
 assert.equal(new Set(allQuestionIds).size, allQuestionIds.length, 'kanji question IDs should be unique');
 assert.equal(new Set(ENGLISH_WORDS.map(entry => entry.word)).size, ENGLISH_WORDS.length, 'English words should be unique');
@@ -77,6 +84,19 @@ assert.ok(sentenceReadingCount > 0, 'sentence kanji questions must include readi
 for (let i = 0; i < 500; i++) {
   const question = generateQuestion({subject: 'kanji', topic: 'writing', grade: 3});
   assert.ok(!question.question.includes('に あう かんじ'), 'writing prompts should use natural wording');
+}
+
+for (const topic of ['mix', 'words', 'idioms', 'dialogue', 'fill']) {
+  for (const boss of [false, true]) {
+    for (let i = 0; i < 250; i++) {
+      const question = generateQuestion({subject: 'juniorEnglish', topic, boss});
+      assert.ok(question.choices.length >= 2, 'junior English questions must have at least two choices');
+      assert.ok(question.choices.includes(question.answer), 'junior English choices must include the answer');
+      assert.equal(question.choices[question.correctIndex], question.answer, 'junior English answer must match correctIndex');
+      assert.match(question.tag, /^中学英語・/, 'junior English questions should identify their section');
+      if (topic === 'fill') assert.equal(question.visual?.type, 'sentence', 'fill-in questions should show the sentence');
+    }
+  }
 }
 
 console.log('Clock and sentence-based kanji questions always include their answers.');

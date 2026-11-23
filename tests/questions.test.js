@@ -99,4 +99,17 @@ for (const topic of ['mix', 'words', 'idioms', 'dialogue', 'fill']) {
   }
 }
 
+for (let i = 0; i < 1000; i++) {
+  const wordQuestion = generateQuestion({subject: 'juniorEnglish', topic: 'words'});
+  if (wordQuestion.question.includes('えいごで？')) {
+    assert.notEqual(wordQuestion.visual?.word, wordQuestion.answer, 'reverse junior word questions must not show the answer');
+    assert.equal(wordQuestion.speech, undefined, 'reverse junior word questions must not read the answer aloud');
+  }
+  const idiomQuestion = generateQuestion({subject: 'juniorEnglish', topic: 'idioms'});
+  if (idiomQuestion.question.includes('あらわす じゅくご')) {
+    assert.notEqual(idiomQuestion.visual?.phrase, idiomQuestion.answer, 'reverse junior idiom questions must not show the answer');
+    assert.equal(idiomQuestion.speech, undefined, 'reverse junior idiom questions must not read the answer aloud');
+  }
+}
+
 console.log('Clock and sentence-based kanji questions always include their answers.');

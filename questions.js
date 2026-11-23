@@ -957,7 +957,7 @@
     const other = pick(entries.filter(x=>x.id!==e.id));
     const toEnglish = Math.random() < 0.32;
     if (toEnglish) {
-      return twoChoices({id:e.id, question:`「${e.japanese}」は えいごで？`, explanation:`「${e.english}」だよ。`}, e.english, other.english, {speech:e.english, tag:'えいぶん'});
+      return twoChoices({id:e.id, question:`「${e.japanese}」は えいごで？`, explanation:`「${e.english}」だよ。`}, e.english, other.english, {tag:'えいぶん'});
     }
     return twoChoices({id:e.id, question:`「${e.english}」の いみは？`, explanation:`${e.english} = ${e.japanese}`, }, e.japanese, other.japanese, {speech:e.english, tag:'えいぶん'});
   }
@@ -971,7 +971,7 @@
       const reverse = coin();
       if (reverse) {
         return twoChoices({id:e.id, question:`「${e.meaning}」を えいごで？`, explanation:`「${e.meaning}」は ${e.word} だよ。`}, e.word, other.word, {
-          tag:'中学英語・英単語', timeLimitSec:15, speech:e.word, visual:{type:'english-word', word:e.word}
+          tag:'中学英語・英単語', timeLimitSec:15, visual:{type:'english-word', word:e.meaning}
         });
       }
       return twoChoices({id:e.id, question:`「${e.word}」の いみは？`, explanation:`${e.word} は「${e.meaning}」だよ。`}, e.meaning, other.meaning, {
@@ -985,7 +985,7 @@
       const reverse = coin();
       if (reverse) {
         return twoChoices({id:e.id, question:`「${e.meaning}」を あらわす じゅくごは？`, explanation:`「${e.phrase}」は「${e.meaning}」という いみだよ。`}, e.phrase, other.phrase, {
-          tag:'中学英語・熟語', timeLimitSec:15, speech:e.phrase, visual:{type:'idiom', phrase:e.phrase, example:e.example}
+          tag:'中学英語・熟語', timeLimitSec:15, visual:{type:'idiom', phrase:e.meaning, example:'意味を表す熟語を選ぼう'}
         });
       }
       return twoChoices({id:e.id, question:`「${e.phrase}」の いみは？`, explanation:`${e.phrase} は「${e.meaning}」だよ。`}, e.meaning, other.meaning, {
@@ -995,12 +995,12 @@
     if (kind === 'dialogue') {
       const e = freshItem(JUNIOR_ENGLISH_DIALOGUES, recentIds);
       return twoChoices({id:e.id, question:'会話の（　）に 入る ことばは？', explanation:e.japanese}, e.answer, pick(e.wrong), {
-        tag:'中学英語・会話文', timeLimitSec:20, speech:e.answer, visual:{type:'sentence', text:e.prompt}
+        tag:'中学英語・会話文', timeLimitSec:20, visual:{type:'sentence', text:e.prompt}
       });
     }
     const e = freshItem(JUNIOR_ENGLISH_FILLINS, recentIds);
     return twoChoices({id:e.id, question:'文の 空らんに 入る えいごは？', explanation:`${e.japanese} 正解は「${e.answer}」だよ。`}, e.answer, pick(e.wrong), {
-      tag:'中学英語・空所補充', timeLimitSec:20, speech:e.sentence.replace('___', e.answer), visual:{type:'sentence', text:e.sentence.replace('___', '□')}
+      tag:'中学英語・空所補充', timeLimitSec:20, visual:{type:'sentence', text:e.sentence.replace('___', '□')}
     });
   }
 

@@ -5,6 +5,11 @@
   const MAX_QUESTIONS = 10;
   const AUTO_ADVANCE_MS = 4000;
   const DEFAULT_ANSWER_LIMIT_MS = 10000;
+  const STAGES = {
+    1: {number:'ステージ 01', name:'にじいろの そうげん', badge:'🌤️', theme:'stage-1'},
+    2: {number:'ステージ 02', name:'サンセット・シティ', badge:'🌇', theme:'stage-2'},
+    3: {number:'ステージ 03', name:'ナイト・ハイウェイ', badge:'🌌', theme:'stage-3'}
+  };
   const TOPICS = {
     math: [
       ['mix', 'なんでも ミックス'],
@@ -38,7 +43,8 @@
 
   const el = {
     tabs: [...document.querySelectorAll('[data-subject]')],
-    topic: $('topicSelect'), grade: $('gradeSelect'), gradeWrap: $('gradeWrap'),
+    topic: $('topicSelect'), stage: $('stageSelect'), grade: $('gradeSelect'), gradeWrap: $('gradeWrap'),
+    stageNumber: $('stageNumber'), stageName: $('stageName'), stageBadge: $('stageBadge'),
     qKind: $('questionKind'), qGrade: $('questionGrade'), qText: $('questionText'), visual: $('questionVisual'),
     choices: [], roadChoices: $('roadChoices'),
     vehicleChoices: $('vehicleChoices'), vehicleProgress: $('vehicleProgress'),
@@ -54,7 +60,7 @@
   };
 
   let state = {
-    subject: 'math', topic: 'mix', grade: 3, number: 1, question: null,
+    subject: 'math', topic: 'mix', stage: 1, grade: 3, number: 1, question: null,
     coins: 0, streak: 0, correct: 0, wrong: 0, locked: false,
     mistakes: [], recent: [], sound: true, vehicleId: 'blue-racer'
   };
@@ -105,12 +111,24 @@
     }
   }
 
+  function updateStage() {
+    const stage = STAGES[state.stage] || STAGES[1];
+    el.stage.value = String(state.stage);
+    el.stageNumber.textContent = stage.number;
+    el.stageName.textContent = stage.name;
+    el.stageBadge.textContent = stage.badge;
+    el.world.classList.remove('stage-1', 'stage-2', 'stage-3');
+    el.world.classList.add(stage.theme);
+    if (drive.scene) drive.scene.setStage(state.stage);
+  }
+
   function resetGame() {
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     clearAdvanceTimer();
     clearAnswerTimer();
-    const {subject, topic, grade, sound, vehicleId} = state;
-    state = {subject, topic, grade, sound, vehicleId, number:1, question:null, coins:0, streak:0, correct:0, wrong:0, locked:false, mistakes:[], recent:[]};
+    const {subject, topic, stage, grade, sound, vehicleId} = state;
+    state = {subject, topic, stage, grade, sound, vehicleId, number:1, question:null, coins:0, streak:0, correct:0, wrong:0, locked:false, mistakes:[], recent:[]};
+    updateStage();
     el.finish.hidden = true;
     renderVehicleChoices();
     applySelectedVehicle();
@@ -132,7 +150,11 @@
     }
 
     // まちがえた問題は、すこし後で復習として再出題する
-    const boss = state.number % 4 === 0;
+    const boss = state.stage === 1
+      ? state.number % 4 === 0
+      : state.stage === 2
+        ? state.number % 3 === 0
+        : state.number % 2 === 0;
     const revisit = state.mistakes.length > 0 && state.number % 4 === 0 && !boss;
     const q = revisit ? state.mistakes.shift() : window.StudyQuestions.generateQuestion({
       subject:state.subject, topic:state.topic, grade:state.grade, recentIds:state.recent, boss,
@@ -364,6 +386,7 @@
     if (!el.canvas) return;
     try {
       drive.scene = new window.DriveScene(el.canvas);
+      drive.scene.setStage(state.stage);
       applySelectedVehicle();
       window.addEventListener('resize', () => drive.scene.resize(), {passive: true});
       drive.lastTime = performance.now();
@@ -717,6 +740,7 @@
     });
   }
   el.topic.addEventListener('change', () => {state.topic = el.topic.value; resetGame();});
+  el.stage.addEventListener('change', () => {state.stage = Number(el.stage.value); updateStage(); resetGame();});
   el.grade.addEventListener('change', () => {state.grade = Number(el.grade.value); resetGame();});
   el.drives.forEach((btn,i)=>btn.addEventListener('click',()=>choose(i)));
   el.next.addEventListener('click',advance);
@@ -791,6 +815,7 @@
   }
   document.addEventListener('visibilitychange', onGameVisibilityChanged);
   updateTopics();
+  updateStage();
   resetGame();
 
   // HTTPS（GitHub Pages 等）または localhost でのみPWAのオフライン機能が動きます。

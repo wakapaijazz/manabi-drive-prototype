@@ -9,12 +9,12 @@
   <link rel="icon" type="image/png" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>まなびドライブ | たのしく まなぼう！</title>
-  <link rel="stylesheet" href="style.css?v=juniorEnglish1">
+  <link rel="stylesheet" href="style.css?v=stages1">
   <script src="vendor/three.min.js" defer></script>
-  <script src="road-geometry.js?v=juniorEnglish1" defer></script>
-  <script src="drive-3d.js?v=juniorEnglish1" defer></script>
-  <script src="questions.js?v=juniorEnglish1" defer></script>
-  <script src="app.js?v=juniorEnglish1" defer></script>
+  <script src="road-geometry.js?v=stages1" defer></script>
+  <script src="drive-3d.js?v=stages1" defer></script>
+  <script src="questions.js?v=stages1" defer></script>
+  <script src="app.js?v=stages1" defer></script>
 </head>
 <body>
   <div class="page">
@@ -49,6 +49,16 @@
           <span aria-hidden="true">⌄</span>
         </div>
 
+        <label class="field-label" for="stageSelect">ステージを えらぶ</label>
+        <div class="select-wrap">
+          <select id="stageSelect" aria-label="ステージをえらぶ">
+            <option value="1">ステージ1　にじいろの そうげん</option>
+            <option value="2">ステージ2　サンセット・シティ</option>
+            <option value="3">ステージ3　ナイト・ハイウェイ</option>
+          </select>
+          <span aria-hidden="true">⌄</span>
+        </div>
+
         <div id="gradeWrap" class="grade-wrap" hidden>
           <label class="field-label" for="gradeSelect">どこまでの かんじ？</label>
           <div class="select-wrap">
@@ -78,7 +88,7 @@
 
       <section class="game-pane" aria-label="まなびドライブのゲームがめん">
         <div class="game-topline">
-          <div class="level-title"><span class="level-badge">🌤️</span><div><small>ステージ 01</small><strong id="stageName">にじいろの そうげん</strong></div></div>
+          <div class="level-title"><span id="stageBadge" class="level-badge">🌤️</span><div><small id="stageNumber">ステージ 01</small><strong id="stageName">にじいろの そうげん</strong></div></div>
           <div class="hud">
             <div class="hud-item" title="あつめたコイン"><span>🪙</span><strong id="coinCount">0</strong></div>
             <div class="hud-item" title="れんぞくせいかい"><span>🔥</span><strong id="streakCount">0</strong></div>

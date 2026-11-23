@@ -43,6 +43,7 @@
       this.lookTarget = new THREE.Vector3();
       this.forward = new THREE.Vector3(0, 0, 1);
       this.time = 0;
+      this.stage = 1;
       this.travelSpeed = 0;
       this.boost = 0;
       this.debugTopDown = false;
@@ -59,6 +60,7 @@
         light: new THREE.MeshBasicMaterial({color: 0xff6061})
       };
       this.setupEnvironment();
+      this.setStage(1);
       this.applyVehiclePalette(this.vehicle);
       this.createCar(this.vehicle);
       this.roadGroup = null;
@@ -72,9 +74,10 @@
       sun.position.set(-35, 80, -20);
       this.scene.add(sun);
 
+      this.grassMaterial = new THREE.MeshStandardMaterial({color: 0x60a95f, roughness: 1});
       const grass = new THREE.Mesh(
         new THREE.PlaneGeometry(700, 700),
-        new THREE.MeshStandardMaterial({color: 0x60a95f, roughness: 1})
+        this.grassMaterial
       );
       grass.rotation.x = -Math.PI / 2;
       grass.position.y = -.04;
@@ -103,12 +106,28 @@
       }
       this.scenery.add(this.treeTrunks, this.treeLeaves);
       const hillMat = new THREE.MeshStandardMaterial({color: 0x76b884, roughness: 1});
+      this.hillMaterial = hillMat;
       for (let i = 0; i < 7; i++) {
         const hill = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 10), hillMat);
         hill.scale.set(26 + i % 3 * 8, 8 + i % 2 * 5, 20);
         hill.position.set((i - 3) * 45, -2, 190 + i % 2 * 15);
         this.scene.add(hill);
       }
+    }
+
+    setStage(stage = 1) {
+      const palettes = {
+        1: {sky:0x91caef, fog:0xafd9ec, grass:0x60a95f, hill:0x76b884, edge:0xe8d6a3},
+        2: {sky:0xf0a26f, fog:0xe7b68c, grass:0x4d956b, hill:0x7f866f, edge:0xf0d28b},
+        3: {sky:0x16254d, fog:0x2b3b63, grass:0x294957, hill:0x3d526a, edge:0xd8bb6b}
+      };
+      const palette = palettes[stage] || palettes[1];
+      this.stage = Number(stage) || 1;
+      this.scene.background.setHex(palette.sky);
+      this.scene.fog.color.setHex(palette.fog);
+      this.grassMaterial?.color.setHex(palette.grass);
+      this.hillMaterial?.color.setHex(palette.hill);
+      this.materials.edge.color.setHex(palette.edge);
     }
 
     applyVehiclePalette(vehicle) {

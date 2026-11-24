@@ -1,13 +1,13 @@
 {
   "name": "まなびドライブ - さんすう・かんじ・えいご",
   "short_name": "まなびドライブ",
-  "description": "2たくクイズで、たのしくドライブしながらおべんきょう！",
+  "description": "左右の道をえらんで、算数・漢字・英語・中学英語を楽しく学ぶドライブゲーム。",
   "lang": "ja",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f3f7ff",
-  "theme_color": "#2a66d9",
+  "background_color": "#0b101a",
+  "theme_color": "#0b101a",
   "icons": [
     {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
     {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}

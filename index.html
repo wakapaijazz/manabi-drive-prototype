@@ -3,144 +3,149 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#2a66d9">
+  <meta name="theme-color" content="#0b101a">
   <meta name="description" content="左右の道をえらんで、算数・漢字・英語・中学英語を楽しく学ぶドライブゲーム。">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <title>まなびドライブ | たのしく まなぼう！</title>
-  <link rel="stylesheet" href="style.css?v=stages5">
+  <title>まなびドライブ | 学習ドライブゲーム</title>
+  <link rel="stylesheet" href="style.css?v=cockpit">
   <script src="vendor/three.min.js" defer></script>
   <script src="road-geometry.js?v=stages5" defer></script>
   <script src="drive-3d.js?v=stages5" defer></script>
   <script src="questions.js?v=stages5" defer></script>
-  <script src="app.js?v=stages5" defer></script>
+  <script src="app.js?v=cockpit" defer></script>
 </head>
 <body>
   <div class="page">
     <header class="topbar">
-      <div class="brand" aria-label="まなびドライブ">
-        <div class="brand-icon" aria-hidden="true">🚙</div>
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"><span></span></div>
         <div>
-          <div class="brand-title">まなび<span>ドライブ</span><span class="logo-star">✦</span></div>
-          <div class="brand-subtitle">まがって、こたえて、ぼうけんしよう！</div>
+          <span class="brand-subtitle" lang="en">MANABI DRIVE</span>
+          <h1 class="brand-title">まなび<span>ドライブ</span></h1>
         </div>
       </div>
       <div class="top-actions">
-        <span class="header-tag">こどものための 2〜4たくゲーム</span>
         <button type="button" id="soundButton" class="icon-button" aria-pressed="true" title="こうかおんのオン・オフ">🔊 <span>おと ON</span></button>
       </div>
     </header>
 
     <main class="main-grid">
       <aside class="sidebar" aria-label="ゲームのせってい">
-        <div class="sidebar-eyebrow"><span class="pulse-dot"></span> LET'S PLAY!</div>
-        <h1>きょうは なにを<br><strong>まなぶ？</strong></h1>
-        <div class="subject-tabs" role="group" aria-label="きょうかをえらぶ">
-          <button type="button" class="subject-tab is-active" data-subject="math" aria-pressed="true"><span class="subject-icon">🔢</span> さんすう</button>
-          <button type="button" class="subject-tab" data-subject="kanji" aria-pressed="false"><span class="subject-icon">✏️</span> かんじ</button>
-          <button type="button" class="subject-tab" data-subject="english" aria-pressed="false"><span class="subject-icon">🍎</span> えいご</button>
-          <button type="button" class="subject-tab" data-subject="juniorEnglish" aria-pressed="false"><span class="subject-icon">🎓</span> 中学英語</button>
-        </div>
-
-        <label class="field-label" for="topicSelect">チャレンジする もんだい</label>
-        <div class="select-wrap">
-          <select id="topicSelect" aria-label="もんだいのしゅるい"></select>
-          <span aria-hidden="true">⌄</span>
-        </div>
-
-        <label class="field-label" for="stageSelect">ステージを えらぶ</label>
-        <div class="select-wrap">
-          <select id="stageSelect" aria-label="ステージをえらぶ">
-            <option value="1">ステージ1　にじいろの そうげん</option>
-            <option value="2">ステージ2　サンセット・シティ</option>
-            <option value="3">ステージ3　ナイト・ハイウェイ</option>
-          </select>
-          <span aria-hidden="true">⌄</span>
-        </div>
-
-        <div id="gradeWrap" class="grade-wrap" hidden>
-          <label class="field-label" for="gradeSelect">どこまでの かんじ？</label>
-          <div class="select-wrap">
-            <select id="gradeSelect">
-              <option value="1">1年生まで</option>
-              <option value="2">2年生まで</option>
-              <option value="3" selected>3年生まで</option>
-            </select>
-            <span aria-hidden="true">⌄</span>
+        <h2 class="sidebar-title">コースせってい</h2>
+        <button type="button" id="settingsToggle" class="settings-toggle" aria-expanded="false" aria-controls="courseSettings">
+          <span class="settings-label">コースせってい</span><span class="chevron" aria-hidden="true"></span>
+        </button>
+        <div id="courseSettings" class="sidebar-content">
+          <div class="subject-tabs" role="group" aria-label="きょうかをえらぶ">
+            <button type="button" class="subject-tab is-active" data-subject="math" aria-pressed="true"><span class="subject-icon" aria-hidden="true">＋</span>さんすう</button>
+            <button type="button" class="subject-tab" data-subject="kanji" aria-pressed="false"><span class="subject-icon" aria-hidden="true">字</span>かんじ</button>
+            <button type="button" class="subject-tab" data-subject="english" aria-pressed="false"><span class="subject-icon" aria-hidden="true">Aa</span>えいご</button>
+            <button type="button" class="subject-tab" data-subject="juniorEnglish" aria-pressed="false"><span class="subject-icon" aria-hidden="true">EN</span>中学英語</button>
           </div>
-        </div>
 
-        <section class="vehicle-panel" aria-label="くるまをえらぶ">
-          <div class="vehicle-panel-title">🚗 <strong>くるまを えらぶ</strong></div>
-          <div id="vehicleChoices" class="vehicle-choices" role="group" aria-label="くるまの種類"></div>
-          <p id="vehicleProgress" class="vehicle-progress">3れんぞく せいかいで あたらしい くるまが なかまになるよ</p>
-        </section>
+          <div class="course-fields">
+            <div>
+              <label class="field-label" for="topicSelect">もんだいの しゅるい</label>
+              <div class="select-wrap">
+                <select id="topicSelect"></select>
+                <span class="chevron" aria-hidden="true"></span>
+              </div>
+            </div>
 
-        <div class="sidebar-note">
-          <div class="note-head">🎯 <strong>きょうの もくひょう</strong></div>
-          <p>10もん クリアして、<br><strong>おたからコイン</strong>を あつめよう！</p>
-          <div class="mini-route" aria-hidden="true"><span>🚩</span><span class="route-dots">•••••••</span><span>🏆</span></div>
+            <div>
+              <label class="field-label" for="stageSelect">ステージ</label>
+              <div class="select-wrap">
+                <select id="stageSelect">
+                  <option value="1">1　にじいろの そうげん</option>
+                  <option value="2">2　サンセット・シティ</option>
+                  <option value="3">3　ナイト・ハイウェイ</option>
+                </select>
+                <span class="chevron" aria-hidden="true"></span>
+              </div>
+            </div>
+
+            <div id="gradeWrap" hidden>
+              <label class="field-label" for="gradeSelect">どこまでの かんじ？</label>
+              <div class="select-wrap">
+                <select id="gradeSelect">
+                  <option value="1">1年生まで</option>
+                  <option value="2">2年生まで</option>
+                  <option value="3" selected>3年生まで</option>
+                </select>
+                <span class="chevron" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+
+          <section class="vehicle-panel" aria-labelledby="garageTitle">
+            <h3 id="garageTitle" class="vehicle-panel-title">ガレージ</h3>
+            <div id="vehicleChoices" class="vehicle-choices" role="group" aria-label="くるまをえらぶ"></div>
+            <p id="vehicleProgress" class="vehicle-progress"></p>
+          </section>
+          <button type="button" id="restartButton" class="restart-button"><span aria-hidden="true">↻</span> さいしょから あそぶ</button>
         </div>
-        <button type="button" id="restartButton" class="restart-button"><span aria-hidden="true">↻</span> さいしょから あそぶ</button>
-        <div class="sidebar-tip">💡 まちがえても だいじょうぶ！<br>じっくり かんがえて いいよ。</div>
       </aside>
 
-      <section class="game-pane" aria-label="まなびドライブのゲームがめん">
+      <section class="game-pane" id="gamePane" data-stage="1" aria-label="まなびドライブのゲームがめん">
         <div class="game-topline">
-          <div class="level-title"><span id="stageBadge" class="level-badge">🌤️</span><div><small id="stageNumber">ステージ 01</small><strong id="stageName">にじいろの そうげん</strong></div></div>
+          <div class="level-title"><span id="stageBadge" class="level-badge" aria-hidden="true">🌤️</span><div><small id="stageNumber">ステージ 01</small><strong id="stageName">にじいろの そうげん</strong></div></div>
           <div class="hud">
-            <div class="hud-item" title="あつめたコイン"><span>🪙</span><strong id="coinCount">0</strong></div>
-            <div class="hud-item" title="れんぞくせいかい"><span>🔥</span><strong id="streakCount">0</strong></div>
-            <div class="hud-item hud-solved" title="いまの もんだい"><strong id="questionCounter">1</strong><span>/ 10</span></div>
+            <div class="hud-item"><span class="hud-label">コイン</span><strong id="coinCount">0</strong></div>
+            <div class="hud-item"><span class="hud-label">れんぞく</span><strong id="streakCount">0</strong></div>
+            <div class="hud-item hud-solved"><span class="hud-label">もんだい</span><div><strong id="questionCounter">1</strong><span class="hud-total"> / 10</span></div></div>
           </div>
         </div>
 
-        <div class="progress-track" aria-label="ステージのしんちょく"><div id="progressFill" class="progress-fill"></div></div>
+        <div class="progress-track" id="progressTrack" role="progressbar" aria-label="ステージのしんちょく" aria-valuemin="0" aria-valuemax="10" aria-valuenow="0"><div id="progressFill" class="progress-fill"></div></div>
 
-        <div class="question-panel">
-          <div class="question-main">
-            <div class="question-overline"><span class="question-dot">✦</span><span id="questionKind">たし算・ひき算</span><span id="questionGrade" class="grade-chip" hidden></span></div>
-            <h2 id="questionText">もんだいを よみこみちゅう...</h2>
-            <button type="button" id="speakButton" class="speak-button" hidden>🔊 えいごを きく</button>
+        <div class="cockpit">
+          <div class="question-panel">
+            <div class="question-main">
+              <div class="question-overline"><span id="questionKind">たし算・ひき算</span><span id="questionGrade" class="grade-chip" hidden></span></div>
+              <h2 id="questionText">もんだいを よみこみちゅう...</h2>
+              <button type="button" id="speakButton" class="speak-button" hidden>🔊 えいごを きく</button>
+            </div>
+            <div id="questionVisual" class="question-visual" aria-label="もんだいの ず"></div>
           </div>
-          <div id="questionVisual" class="question-visual" aria-label="もんだいの ず"></div>
-        </div>
 
-        <div id="roadChoices" class="road-choices choice-count-2" aria-label="こたえの みち"></div>
-        <div class="world" id="world" aria-label="どちらの みちが せいかいかな？">
-          <canvas id="driveCanvas" class="drive-canvas" aria-hidden="true"></canvas>
-          <div id="answerTimer" class="answer-timer" role="timer" aria-live="polite"><span aria-hidden="true">⏱</span><strong id="answerTime">10</strong><span>びょう</span><div class="answer-timer-track"><span id="answerTimerFill"></span></div></div>
-          <div id="bossBadge" class="boss-badge" hidden>⚡ BOSS CROSSING</div>
-          <div id="worldTip" class="world-tip">どっちの みちに すすむ？</div>
-        </div>
+          <div class="world" id="world" role="region" aria-label="どちらの みちが せいかいかな？">
+            <canvas id="driveCanvas" class="drive-canvas" aria-hidden="true"></canvas>
+            <div id="answerTimer" class="answer-timer" role="timer">
+              <div class="timer-label"><strong id="answerTime">10</strong><span>びょう</span></div>
+              <div class="answer-timer-track"><span id="answerTimerFill"></span></div>
+            </div>
+            <div id="bossBadge" class="boss-badge" hidden>ボスこうさてん</div>
+            <div id="worldTip" class="world-tip">どっちの みちに すすむ？</div>
+          </div>
 
-        <div class="controls-row">
-          <button type="button" id="goLeft" class="drive-control drive-control-left"><span class="control-arrow">←</span><span><strong>ひだり</strong><small>キーボード ←</small></span></button>
-          <div class="control-hint">🚗<span>タップして<br>ハンドルを きろう！</span></div>
-          <button type="button" id="goRight" class="drive-control drive-control-right"><span><strong>みぎ</strong><small>キーボード →</small></span><span class="control-arrow">→</span></button>
+          <div id="roadChoices" class="road-choices" role="group" aria-label="こたえの みち"></div>
         </div>
 
         <div id="feedback" class="feedback" role="status" aria-live="polite" hidden>
-          <div id="feedbackIcon" class="feedback-icon">🎉</div>
+          <div id="feedbackIcon" class="feedback-icon" aria-hidden="true">🎉</div>
           <div class="feedback-copy"><strong id="feedbackTitle">せいかい！</strong><p id="feedbackText">よくできました！</p></div>
-          <button type="button" id="nextButton" class="next-button">すぐ つぎへ →</button>
+          <button type="button" id="nextButton" class="next-button">すぐ つぎへ</button>
         </div>
-        <div class="game-footnote"><span>⌨️ PCでは <kbd>←</kbd> <kbd>→</kbd>、交差点では <kbd>1</kbd>〜<kbd>4</kbd> キーでも あそべるよ</span><span>🫶 まちがえても ライフは へらないよ</span></div>
+        <div class="game-footnote">
+          <span class="keyboard-help"><kbd>←</kbd> <kbd>→</kbd> でえらぶ ／ ボスこうさてんは <kbd>1</kbd>〜<kbd>4</kbd></span>
+          <span class="touch-help">こたえを タップ、または がめんを よこに スワイプ</span>
+        </div>
       </section>
     </main>
-    <footer class="page-footer">まなびドライブ・プロトタイプ ｜ おとなのひとへ：問題は <code>questions.js</code> にあります。記録はこの端末内だけに保存します。</footer>
+    <footer class="page-footer">プレイの記録は、この端末に保存されます。</footer>
   </div>
 
   <div id="finishOverlay" class="overlay" hidden>
     <div class="finish-dialog" role="dialog" aria-modal="true" aria-labelledby="finishTitle" tabindex="-1">
       <div class="finish-art" aria-hidden="true">🏆</div>
-      <div class="finish-kicker">GOAL! おめでとう！</div>
+      <div class="finish-kicker" lang="en">FINISH</div>
       <h2 id="finishTitle">10もん クリア！</h2>
       <div class="finish-stars" id="finishStars" aria-label="がんばりの ほし">⭐⭐⭐</div>
       <p id="finishSummary">よく がんばったね！</p>
       <div class="finish-stats"><span>🪙 コイン <strong id="finishCoins">0</strong></span><span>✅ せいかい <strong id="finishCorrect">0</strong> / 10</span></div>
-      <button type="button" id="playAgain" class="play-again">もういちど ドライブ 🚙</button>
+      <button type="button" id="playAgain" class="play-again">もういちど ドライブ</button>
     </div>
   </div>
 </body>

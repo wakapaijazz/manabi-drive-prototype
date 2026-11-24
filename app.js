@@ -44,16 +44,16 @@
   const el = {
     tabs: [...document.querySelectorAll('[data-subject]')],
     topic: $('topicSelect'), stage: $('stageSelect'), grade: $('gradeSelect'), gradeWrap: $('gradeWrap'),
-    stageNumber: $('stageNumber'), stageName: $('stageName'), stageBadge: $('stageBadge'),
+    stageNumber: $('stageNumber'), stageName: $('stageName'), stageBadge: $('stageBadge'), gamePane: $('gamePane'),
     qKind: $('questionKind'), qGrade: $('questionGrade'), qText: $('questionText'), visual: $('questionVisual'),
     choices: [], roadChoices: $('roadChoices'),
     vehicleChoices: $('vehicleChoices'), vehicleProgress: $('vehicleProgress'),
-    drives: [$('goLeft'), $('goRight')], controlsRow: document.querySelector('.controls-row'), controlHint: document.querySelector('.control-hint'),
+    settingsToggle: $('settingsToggle'),
     world: $('world'), canvas: $('driveCanvas'), bossBadge: $('bossBadge'), worldTip: $('worldTip'),
     answerTimer: $('answerTimer'), answerTime: $('answerTime'), answerTimerFill: $('answerTimerFill'),
     feedback: $('feedback'), fIcon: $('feedbackIcon'), fTitle: $('feedbackTitle'), fText: $('feedbackText'),
     next: $('nextButton'), coins: $('coinCount'), streak: $('streakCount'), counter: $('questionCounter'),
-    progress: $('progressFill'), sound: $('soundButton'),
+    progress: $('progressFill'), progressTrack: $('progressTrack'), sound: $('soundButton'),
     speak: $('speakButton'), restart: $('restartButton'), finish: $('finishOverlay'),
     dialog: document.querySelector('.finish-dialog'), playAgain: $('playAgain'),
     finishCorrect: $('finishCorrect'), finishCoins: $('finishCoins'), finishSummary: $('finishSummary'), finishStars: $('finishStars')
@@ -81,7 +81,8 @@
   let advanceTimer = null;
   let answerTimer = null;
   let answerLastTick = 0;
-  let worldInView = !('IntersectionObserver' in window);
+  const playAreas = [el.world, el.roadChoices];
+  const visiblePlayAreas = new Set();
   const drive = {
     scene: null, lastTime: 0, frame: 0, speed: .2, boost: 0,
     choiceCount: 2, isBoss: false
@@ -117,6 +118,7 @@
     el.stageNumber.textContent = stage.number;
     el.stageName.textContent = stage.name;
     el.stageBadge.textContent = stage.badge;
+    el.gamePane.dataset.stage = String(state.stage);
     el.world.classList.remove('stage-1', 'stage-2', 'stage-3');
     el.world.classList.add(stage.theme);
     if (drive.scene) drive.scene.setStage(state.stage);
@@ -144,11 +146,6 @@
     el.feedback.hidden = true;
     el.feedback.classList.remove('is-error');
     resetDriveAnimation();
-    for (const btn of el.drives) {
-      btn.disabled = false;
-      btn.classList.remove('is-correct', 'is-wrong');
-    }
-
     // まちがえた問題は、すこし後で復習として再出題する
     const boss = state.stage === 1
       ? state.number % 4 === 0
@@ -177,18 +174,15 @@
 
   function renderChoices(q) {
     const count = Math.max(2, q.choiceCount || q.choices.length);
-    const directions = count === 2
-      ? ['↖ ひだり', 'みぎ ↗']
-      : Array.from({length: count}, (_, index) => `${index === 0 ? '↖' : index === count - 1 ? '↗' : '↑'} ${index + 1}ばん`);
-    el.roadChoices.className = `road-choices choice-count-${count}`;
+    const directions = count === 2 ? ['ひだり', 'みぎ'] : q.choices.map((_, index) => `${index + 1}ばん`);
+    const keys = count === 2 ? ['←', '→'] : q.choices.map((_, index) => String(index + 1));
     el.roadChoices.style.setProperty('--choice-count', String(count));
     el.roadChoices.replaceChildren();
     el.choices = q.choices.map((choice, index) => {
       const button = document.createElement('button');
       button.type = 'button';
-      button.className = `road-choice choice-slot-${index}${count === 2 ? (index === 0 ? ' road-choice-left' : ' road-choice-right') : ''}`;
-      button.setAttribute('aria-label', count === 2 ? `${index === 0 ? 'ひだり' : 'みぎ'}の こたえ` : `${index + 1}ばんめの こたえ`);
-      button.innerHTML = `<span class="choice-direction">${directions[index]}</span><strong></strong><span class="answer-state" aria-hidden="true"></span>`;
+      button.className = count === 2 && index === 1 ? 'road-choice road-choice-right' : 'road-choice';
+      button.innerHTML = `<span class="choice-heading"><span class="choice-direction">${directions[index]}</span><kbd aria-hidden="true">${keys[index]}</kbd></span><strong></strong><span class="answer-state" aria-hidden="true"></span>`;
       button.querySelector('strong').textContent = choice;
       button.addEventListener('click', () => choose(index));
       el.roadChoices.append(button);
@@ -205,22 +199,18 @@
     el.bossBadge.hidden = !isBoss;
     el.worldTip.textContent = isBoss ? 'どの みちに すすむ？' : 'どっちの みちに すすむ？';
     el.world.setAttribute('aria-label', isBoss ? 'どの みちが せいかいかな？' : 'どちらの みちが せいかいかな？');
-    updateDriveControls(isBoss);
   }
 
-  function updateDriveControls(isBoss) {
-    el.controlsRow.classList.toggle('is-boss', isBoss);
-    for (const btn of el.drives) btn.hidden = isBoss;
-    el.controlHint.innerHTML = isBoss
-      ? '🎯<span>1〜4キー または<br>こたえを タップ！</span>'
-      : '🚗<span>タップして<br>ハンドルを きろう！</span>';
+  function updateProgress(completed) {
+    el.progress.style.width = `${completed / MAX_QUESTIONS * 100}%`;
+    el.progressTrack.setAttribute('aria-valuenow', completed);
   }
 
   function updateHud() {
     el.coins.textContent = state.coins;
     el.streak.textContent = state.streak;
     el.counter.textContent = Math.min(state.number, MAX_QUESTIONS);
-    el.progress.style.width = `${Math.max(0, state.number - 1) / MAX_QUESTIONS * 100}%`;
+    updateProgress(Math.max(0, state.number - 1));
   }
 
   function choose(which) {
@@ -248,15 +238,14 @@
     if (!right) el.choices[which].classList.add('is-wrong');
     el.choices[q.correctIndex].querySelector('.answer-state').textContent = '✅';
     if (!right) el.choices[which].querySelector('.answer-state').textContent = '💡';
-    for (const btn of [...el.choices, ...el.drives]) btn.disabled = true;
+    for (const btn of el.choices) btn.disabled = true;
 
     el.feedback.hidden = false;
     el.feedback.classList.toggle('is-error', !right);
     el.fIcon.textContent = right ? (state.streak % 3 === 0 ? '🌟' : '🎉') : '💡';
     el.fTitle.textContent = right ? (state.streak >= 3 ? `${state.streak}れんぞく せいかい！` : 'せいかい！ いいね！') : 'おっと！ ちょっと よりみち';
     el.fText.textContent = q.explanation;
-    el.next.textContent = 'すぐ つぎへ →';
-    el.progress.style.width = `${state.number / MAX_QUESTIONS * 100}%`;
+    updateProgress(state.number);
     el.coins.textContent = state.coins;
     el.streak.textContent = state.streak;
     el.next.focus({preventScroll:true});
@@ -295,7 +284,8 @@
   }
 
   function canAnswerNow() {
-    return worldInView && document.visibilityState !== 'hidden';
+    const playAreaInView = !('IntersectionObserver' in window) || visiblePlayAreas.size === playAreas.length;
+    return playAreaInView && document.visibilityState !== 'hidden';
   }
 
   function onGameVisibilityChanged() {
@@ -316,14 +306,14 @@
     el.worldTip.textContent = 'じかんぎれ！ いったん とまろう';
     if (drive.scene) drive.scene.stop();
     el.choices[q.correctIndex].classList.add('is-correct');
-    for (const btn of [...el.choices, ...el.drives]) btn.disabled = true;
+    el.choices[q.correctIndex].querySelector('.answer-state').textContent = '✅';
+    for (const btn of el.choices) btn.disabled = true;
     el.feedback.hidden = false;
     el.feedback.classList.add('is-error');
     el.fIcon.textContent = '⏰';
     el.fTitle.textContent = 'タイムアップ！';
     el.fText.textContent = `${q.timeLimitSec || 10}びょう たったよ。${q.explanation}`;
-    el.next.textContent = 'すぐ つぎへ →';
-    el.progress.style.width = `${state.number / MAX_QUESTIONS * 100}%`;
+    updateProgress(state.number);
     el.streak.textContent = state.streak;
     scheduleAdvance();
   }
@@ -350,8 +340,8 @@
       const remaining = Math.max(0, deadline - performance.now());
       const seconds = Math.max(1, Math.ceil(remaining / 1000));
       el.next.textContent = state.number >= MAX_QUESTIONS
-        ? `ゴールへ ${seconds}秒 🏁`
-        : `つぎへ ${seconds}秒 →`;
+        ? `ゴールまで ${seconds}びょう`
+        : `つぎへ ${seconds}びょう`;
       if (remaining <= 0) {
         advanceTimer = null;
         advance();
@@ -740,9 +730,12 @@
     });
   }
   el.topic.addEventListener('change', () => {state.topic = el.topic.value; resetGame();});
-  el.stage.addEventListener('change', () => {state.stage = Number(el.stage.value); updateStage(); resetGame();});
+  el.stage.addEventListener('change', () => {state.stage = Number(el.stage.value); resetGame();});
   el.grade.addEventListener('change', () => {state.grade = Number(el.grade.value); resetGame();});
-  el.drives.forEach((btn,i)=>btn.addEventListener('click',()=>choose(i)));
+  el.settingsToggle.addEventListener('click', () => {
+    const expanded = el.settingsToggle.getAttribute('aria-expanded') === 'true';
+    el.settingsToggle.setAttribute('aria-expanded', String(!expanded));
+  });
   el.next.addEventListener('click',advance);
   el.restart.addEventListener('click',resetGame);
   el.playAgain.addEventListener('click',resetGame);
@@ -808,10 +801,13 @@
   initDriveRenderer();
   if ('IntersectionObserver' in window) {
     const observer = new IntersectionObserver(entries => {
-      worldInView = entries.some(entry => entry.isIntersecting && entry.intersectionRatio >= .25);
+      for (const entry of entries) {
+        if (entry.isIntersecting && entry.intersectionRatio >= .25) visiblePlayAreas.add(entry.target);
+        else visiblePlayAreas.delete(entry.target);
+      }
       onGameVisibilityChanged();
     }, {threshold: [0, .25]});
-    observer.observe(el.world);
+    for (const area of playAreas) observer.observe(area);
   }
   document.addEventListener('visibilitychange', onGameVisibilityChanged);
   updateTopics();

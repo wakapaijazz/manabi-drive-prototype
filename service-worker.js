@@ -1,6 +1,6 @@
-const CACHE = 'manabi-drive-v18-road-clearance';
+const CACHE = 'manabi-drive-v19-cockpit';
 const RESOURCES = [
-  './', './index.html', './style.css?v=stages5', './questions.js?v=stages5', './app.js?v=stages5',
+  './', './index.html', './style.css?v=cockpit', './questions.js?v=stages5', './app.js?v=cockpit',
   './vendor/three.min.js', './road-geometry.js?v=stages5', './drive-3d.js?v=stages5',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'
 ];

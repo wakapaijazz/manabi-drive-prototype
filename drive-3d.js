@@ -221,7 +221,8 @@
           const side = i % 2 ? 1 : -1;
           const depth = Math.floor(i / 2);
           const z = -145 + depth * 28;
-          const x = side * (25 + (depth % 3) * 10);
+          // 建物は分岐後の道路が広がる範囲より外側に置く。道路を横切る壁に見えないための安全余白。
+          const x = side * (96 + (depth % 3) * 13);
           const width = 8 + (depth % 2) * 5;
           const height = 10 + (depth * 7) % 22;
           const buildingGroup = new THREE.Group();
@@ -237,7 +238,8 @@
           }
           protectFromRoad(buildingGroup, x, z, Math.max(width, 9) * .7);
         }
-        for (let i = 0; i < 8; i++) {
+        // 街灯は分岐前の直線区間だけに置き、曲がった先の走行ラインには入れない。
+        for (let i = 0; i < 6; i++) {
           const z = -142 + i * 22;
           for (const x of [-9.2, 9.2]) {
             const fixture = new THREE.Group();
@@ -266,11 +268,11 @@
       const nightBuilding = material(0x263653);
       const cityLight = basic(0xffd879);
       const mountain = material(0x202d4b);
-      addBox(1.1, 2.5, 120, -6.55, 1.25, -82.5, rail);
-      addBox(1.1, 2.5, 120, 6.55, 1.25, -82.5, rail);
+      addBox(.72, 2.5, 120, -7.3, 1.25, -82.5, rail);
+      addBox(.72, 2.5, 120, 7.3, 1.25, -82.5, rail);
       for (let z = -140; z <= -24; z += 14) {
-        addBox(.28, 2.8, .28, -6.55, 1.35, z, concrete);
-        addBox(.28, 2.8, .28, 6.55, 1.35, z, concrete);
+        addBox(.28, 2.8, .28, -7.3, 1.35, z, concrete);
+        addBox(.28, 2.8, .28, 7.3, 1.35, z, concrete);
       }
       for (let z = -142; z <= 24; z += 42) {
         addCylinder(.62, 20, -5.8, -11, z, concreteDark, 10);

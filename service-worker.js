@@ -1,7 +1,7 @@
-const CACHE = 'manabi-drive-v17-road-clearance';
+const CACHE = 'manabi-drive-v18-road-clearance';
 const RESOURCES = [
-  './', './index.html', './style.css?v=stages4', './questions.js?v=stages4', './app.js?v=stages4',
-  './vendor/three.min.js', './road-geometry.js?v=stages4', './drive-3d.js?v=stages4',
+  './', './index.html', './style.css?v=stages5', './questions.js?v=stages5', './app.js?v=stages5',
+  './vendor/three.min.js', './road-geometry.js?v=stages5', './drive-3d.js?v=stages5',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'
 ];
 self.addEventListener('install', (event) => {

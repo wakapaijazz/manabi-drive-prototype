@@ -9,12 +9,13 @@
   <link rel="icon" type="image/png" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>まなびドライブ | 学習ドライブゲーム</title>
-  <link rel="stylesheet" href="style.css?v=cockpit">
+  <link rel="stylesheet" href="style.css?v=apex">
   <script src="vendor/three.min.js" defer></script>
   <script src="road-geometry.js?v=stages5" defer></script>
-  <script src="drive-3d.js?v=stages5" defer></script>
+  <script src="drive-3d.js?v=apex" defer></script>
+  <script src="drive-audio.js?v=apex" defer></script>
   <script src="questions.js?v=stages5" defer></script>
-  <script src="app.js?v=cockpit" defer></script>
+  <script src="app.js?v=apex" defer></script>
 </head>
 <body>
   <div class="page">
@@ -94,17 +95,24 @@
           <div class="hud">
             <div class="hud-item"><span class="hud-label">コイン</span><strong id="coinCount">0</strong></div>
             <div class="hud-item"><span class="hud-label">れんぞく</span><strong id="streakCount">0</strong></div>
-            <div class="hud-item hud-solved"><span class="hud-label">もんだい</span><div><strong id="questionCounter">1</strong><span class="hud-total"> / 10</span></div></div>
+            <div class="hud-item hud-solved"><span class="hud-label">もんだい</span><div><strong id="questionCounter">0</strong><span class="hud-total"> / 10</span></div></div>
           </div>
         </div>
 
         <div class="progress-track" id="progressTrack" role="progressbar" aria-label="ステージのしんちょく" aria-valuemin="0" aria-valuemax="10" aria-valuenow="0"><div id="progressFill" class="progress-fill"></div></div>
 
         <div class="cockpit">
-          <div class="question-panel">
+          <div id="startPanel" class="question-panel start-panel">
+            <div>
+              <h2>ドライブを はじめよう</h2>
+              <p>10もんの クイズに ちょうせん！</p>
+            </div>
+            <button type="button" id="startButton" class="start-button">スタート</button>
+          </div>
+          <div id="questionPanel" class="question-panel" hidden>
             <div class="question-main">
               <div class="question-overline"><span id="questionKind">たし算・ひき算</span><span id="questionGrade" class="grade-chip" hidden></span></div>
-              <h2 id="questionText">もんだいを よみこみちゅう...</h2>
+              <h2 id="questionText" tabindex="-1">もんだいを よみこみちゅう...</h2>
               <button type="button" id="speakButton" class="speak-button" hidden>🔊 えいごを きく</button>
             </div>
             <div id="questionVisual" class="question-visual" aria-label="もんだいの ず"></div>
@@ -112,15 +120,17 @@
 
           <div class="world" id="world" role="region" aria-label="どちらの みちが せいかいかな？">
             <canvas id="driveCanvas" class="drive-canvas" aria-hidden="true"></canvas>
-            <div id="answerTimer" class="answer-timer" role="timer">
+            <div class="speed-streaks" aria-hidden="true"></div>
+            <div id="speedometer" class="speedometer"><span id="boostLabel" hidden>BOOST</span><div><strong id="speedValue">0</strong> <span>km/h</span></div></div>
+            <div id="answerTimer" class="answer-timer" role="timer" hidden>
               <div class="timer-label"><strong id="answerTime">10</strong><span>びょう</span></div>
               <div class="answer-timer-track"><span id="answerTimerFill"></span></div>
             </div>
             <div id="bossBadge" class="boss-badge" hidden>ボスこうさてん</div>
-            <div id="worldTip" class="world-tip">どっちの みちに すすむ？</div>
+            <div id="worldTip" class="world-tip" hidden>どっちの みちに すすむ？</div>
           </div>
 
-          <div id="roadChoices" class="road-choices" role="group" aria-label="こたえの みち"></div>
+          <div id="roadChoices" class="road-choices" role="group" aria-label="こたえの みち" hidden></div>
         </div>
 
         <div id="feedback" class="feedback" role="status" aria-live="polite" hidden>
@@ -145,7 +155,7 @@
       <div class="finish-stars" id="finishStars" aria-label="がんばりの ほし">⭐⭐⭐</div>
       <p id="finishSummary">よく がんばったね！</p>
       <div class="finish-stats"><span>🪙 コイン <strong id="finishCoins">0</strong></span><span>✅ せいかい <strong id="finishCorrect">0</strong> / 10</span></div>
-      <button type="button" id="playAgain" class="play-again">もういちど ドライブ</button>
+      <button type="button" id="playAgain" class="play-again">つぎの ドライブへ</button>
     </div>
   </div>
 </body>

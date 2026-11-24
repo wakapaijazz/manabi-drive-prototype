@@ -6,6 +6,9 @@
   const G = root.RoadGeometry;
   const clamp = (x, low, high) => Math.max(low, Math.min(high, x));
   const damp = (speed, dt) => 1 - Math.exp(-speed * dt);
+  const APPROACH_START = -84;
+  const APPROACH_LIMIT = -14;
+  const BASE_FOV = 53;
   const DEFAULT_VEHICLE = {id:'blue-racer', style:'racer', body:0x1477d4, trim:0x122840, glass:0x60c9e6};
 
   function makeAsphaltTexture() {
@@ -38,11 +41,13 @@
       this.scene = new THREE.Scene();
       this.scene.background = new THREE.Color(0x91caef);
       this.scene.fog = new THREE.Fog(0xafd9ec, 105, 230);
-      this.camera = new THREE.PerspectiveCamera(52, 1, .1, 400);
+      this.camera = new THREE.PerspectiveCamera(BASE_FOV, 1, .1, 400);
       this.camera.up.set(0, 1, 0);
       this.lookTarget = new THREE.Vector3();
       this.forward = new THREE.Vector3(0, 0, 1);
-      this.time = 0;
+      this.followPosition = new THREE.Vector3();
+      this.followTarget = new THREE.Vector3();
+      this.reducedMotion = root.matchMedia?.('(prefers-reduced-motion: reduce)');
       this.stage = 1;
       this.travelSpeed = 0;
       this.boost = 0;
@@ -58,10 +63,12 @@
         marking: new THREE.MeshBasicMaterial({color: 0xe8ede3, side: THREE.DoubleSide}),
         blue: new THREE.MeshStandardMaterial({color: 0x1477d4, metalness: .35, roughness: .32}),
         trim: new THREE.MeshStandardMaterial({color: 0x122840, metalness: .22, roughness: .48}),
-        glass: new THREE.MeshStandardMaterial({color: 0x60c9e6, metalness: .35, roughness: .2}),
+        glass: new THREE.MeshStandardMaterial({color: 0x60c9e6, metalness: .32, roughness: .23}),
+        windshield: new THREE.MeshPhysicalMaterial({color: 0x12283f, metalness: .48, roughness: .2, clearcoat: .85, clearcoatRoughness: .25}),
         rubber: new THREE.MeshStandardMaterial({color: 0x181d23, roughness: .95}),
         wheel: new THREE.MeshStandardMaterial({color: 0x95a7b0, metalness: .65, roughness: .3}),
-        light: new THREE.MeshBasicMaterial({color: 0xff6061})
+        light: new THREE.MeshBasicMaterial({color: 0xff4b65}),
+        lightCore: new THREE.MeshBasicMaterial({color: 0xffb8a5})
       };
       this.setupEnvironment();
       this.setStage(1);
@@ -73,10 +80,11 @@
     }
 
     setupEnvironment() {
-      this.scene.add(new THREE.HemisphereLight(0xe6f6ff, 0x50653d, 2.1));
-      const sun = new THREE.DirectionalLight(0xfff5dd, 2.1);
-      sun.position.set(-35, 80, -20);
-      this.scene.add(sun);
+      this.ambient = new THREE.HemisphereLight(0xe6f6ff, 0x50653d, 1.65);
+      this.sun = new THREE.DirectionalLight(0xfff5dd, 2.2);
+      this.sun.position.set(-30, 42, -32);
+      this.scene.add(this.ambient, this.sun);
+      this.createSky();
 
       this.grassMaterial = new THREE.MeshStandardMaterial({color: 0x60a95f, roughness: 1});
       const grass = new THREE.Mesh(
@@ -93,12 +101,14 @@
       this.scene.add(this.scenery);
       const trunkMaterial = new THREE.MeshStandardMaterial({color: 0x7e6246, roughness: 1});
       const leafMaterial = new THREE.MeshStandardMaterial({color: 0xffffff, roughness: 1});
-      const treeGeometry = new THREE.ConeGeometry(2.1, 5.2, 7);
+      const treeGeometry = new THREE.ConeGeometry(2.1, 5.2, 8);
       const trunkGeometry = new THREE.CylinderGeometry(.35, .5, 2.2, 6);
       this.treeTrunks = new THREE.InstancedMesh(trunkGeometry, trunkMaterial, 62);
       this.treeLeaves = new THREE.InstancedMesh(treeGeometry, leafMaterial, 62);
+      this.treeTops = new THREE.InstancedMesh(treeGeometry, leafMaterial, 62);
       this.treeTrunks.frustumCulled = false;
       this.treeLeaves.frustumCulled = false;
+      this.treeTops.frustumCulled = false;
       this.treeTrunks.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       this.treeLeaves.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       this.trees = [];
@@ -107,32 +117,105 @@
         const z = -145 + Math.floor(i / 2) * 9.4;
         const x = side * (20 + ((i * 47) % 27));
         this.trees.push({x, z});
-        this.treeLeaves.setColorAt(i, new THREE.Color([0x38815d, 0x478c57, 0x5c9d58][i % 3]));
+        this.treeLeaves.setColorAt(i, new THREE.Color([0x306a50, 0x477a49, 0x526e44][i % 3]));
+        this.treeTops.setColorAt(i, new THREE.Color([0x41835d, 0x507c4d, 0x648551][i % 3]));
       }
-      this.scenery.add(this.treeTrunks, this.treeLeaves);
+      this.scenery.add(this.treeTrunks, this.treeLeaves, this.treeTops);
       const hillMat = new THREE.MeshStandardMaterial({color: 0x76b884, roughness: 1});
       this.hillMaterial = hillMat;
       this.hills = [];
       for (let i = 0; i < 7; i++) {
         const hill = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 10), hillMat);
         hill.scale.set(26 + i % 3 * 8, 8 + i % 2 * 5, 20);
-        hill.position.set((i - 3) * 45, -2, 190 + i % 2 * 15);
+        hill.position.set((i - 3) * 45, -2, 222 + i % 2 * 15);
         this.scene.add(hill);
         this.hills.push(hill);
       }
     }
 
+    createSky() {
+      const material = new THREE.ShaderMaterial({
+        side: THREE.BackSide,
+        depthWrite: false,
+        depthTest: false,
+        uniforms: {
+          zenith: {value:new THREE.Color()}, horizon: {value:new THREE.Color()},
+          glow: {value:new THREE.Color()}, orb: {value:new THREE.Vector3()},
+          night: {value:0}, disc: {value:.025}
+        },
+        vertexShader: `
+          varying vec3 direction;
+          void main() {
+            direction = position;
+            vec4 clip = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            gl_Position = clip.xyww;
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 zenith, horizon, glow, orb;
+          uniform float night, disc;
+          varying vec3 direction;
+          float hash(vec2 p) {
+            vec3 q = fract(vec3(p.xyx) * .1031);
+            q += dot(q, q.yzx + 33.33);
+            return fract((q.x + q.y) * q.z);
+          }
+          float noise(vec2 p) {
+            vec2 a = floor(p), f = fract(p);
+            f *= f * (3.0 - 2.0 * f);
+            return mix(mix(hash(a), hash(a + vec2(1, 0)), f.x),
+                       mix(hash(a + vec2(0, 1)), hash(a + vec2(1, 1)), f.x), f.y);
+          }
+          void main() {
+            vec3 ray = normalize(direction);
+            float elevation = max(0.0, ray.y);
+            vec3 color = mix(horizon, zenith, pow(clamp(elevation * 1.60, 0.0, 1.0), .56));
+            float d = distance(ray, orb);
+            color += glow * (.23 * exp(-d * d * 10.0) + .68 * exp(-d * d * 90.0));
+            color = mix(color, glow * 1.32, 1.0 - smoothstep(disc - .002, disc + .002, d));
+            if (night > .5) {
+              vec2 grid = vec2(atan(ray.x, ray.z), ray.y) * 172.0;
+              vec2 cell = floor(grid);
+              float seed = hash(cell);
+              float speck = 1.0 - smoothstep(.02, .16, length(fract(grid) - vec2(.35, .55)));
+              color += vec3(.52, .67, .93) * speck * step(.94, seed) * smoothstep(.01, .23, elevation);
+            } else {
+              vec2 grid = ray.xz / max(.075, elevation + .13) * vec2(4.0, 8.0);
+              float cloud = noise(grid) * .66 + noise(grid * 2.07) * .22 + noise(grid * 4.11) * .12;
+              float mist = smoothstep(.51, .72, cloud) * smoothstep(.02, .15, elevation);
+              color = mix(color, mix(vec3(.82), glow, .26), mist * .57);
+            }
+            gl_FragColor = vec4(color, 1.0);
+            #include <colorspace_fragment>
+          }
+        `
+      });
+      this.sky = new THREE.Mesh(new THREE.SphereGeometry(260, 36, 20), material);
+      this.sky.frustumCulled = false;
+      this.sky.renderOrder = -100;
+      this.scene.add(this.sky);
+    }
+
     setStage(stage = 1) {
       const palettes = {
-        1: {sky:0x91caef, fog:0xafd9ec, grass:0x60a95f, hill:0x76b884, edge:0xe8d6a3},
-        2: {sky:0xf0a26f, fog:0xe7b68c, grass:0x4d956b, hill:0x7f866f, edge:0xf0d28b},
-        3: {sky:0x16254d, fog:0x2b3b63, grass:0x294957, hill:0x3d526a, edge:0xd8bb6b}
+        1: {sky:0x3588c5, fog:0xc2e2ee, light:0xffefbb, sun:[-.46,.22,1], grass:0x548244, hill:0x6d9978, edge:0xf1dda5},
+        2: {sky:0x5f6d9c, fog:0xf0ad85, light:0xffbc80, sun:[.31,.12,1], grass:0x5b6958, hill:0x876d74, edge:0xf0d28b},
+        3: {sky:0x090e28, fog:0x35466a, light:0xb2d6ff, sun:[-.34,.22,1], grass:0x20374a, hill:0x3d526a, edge:0xc6d9ee}
       };
       const palette = palettes[stage] || palettes[1];
       const nextStage = Number(stage) || 1;
       const needsScenery = this.stage !== nextStage || !this.stageScenery;
       this.stage = nextStage;
-      this.scene.background.setHex(palette.sky);
+      const sky = this.sky.material.uniforms;
+      sky.zenith.value.setHex(palette.sky);
+      sky.horizon.value.setHex(palette.fog);
+      sky.glow.value.setHex(palette.light);
+      sky.orb.value.set(...palette.sun).normalize();
+      sky.night.value = this.stage === 3 ? 1 : 0;
+      sky.disc.value = this.stage === 2 ? .038 : .026;
+      this.sun.color.setHex(palette.light);
+      this.sun.intensity = this.stage === 3 ? 1.18 : 2.4;
+      this.ambient.color.setHex(this.stage === 3 ? 0x95baff : 0xe1efff);
       this.scene.fog.color.setHex(palette.fog);
       this.grassMaterial?.color.setHex(palette.grass);
       this.hillMaterial?.color.setHex(palette.hill);
@@ -140,6 +223,7 @@
       this.ground.position.y = this.stage === 3 ? -22 : -.04;
       this.treeTrunks.visible = this.stage !== 3;
       this.treeLeaves.visible = this.stage !== 3;
+      this.treeTops.visible = this.stage !== 3;
       for (const hill of this.hills) hill.visible = this.stage !== 2 && this.stage !== 3;
       if (needsScenery) this.createStageScenery();
     }
@@ -178,6 +262,19 @@
         group.add(mesh);
         return mesh;
       };
+      const boxInstances = (items, mat) => {
+        if (!items.length) return;
+        const batch = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), mat, items.length);
+        const pose = new THREE.Object3D();
+        for (const [i, [x, y, z, w, h, d, yaw = 0]] of items.entries()) {
+          pose.position.set(x, y, z);
+          pose.scale.set(w, h, d);
+          pose.rotation.y = yaw;
+          pose.updateMatrix();
+          batch.setMatrixAt(i, pose.matrix);
+        }
+        group.add(batch);
+      };
       const addBoxTo = (parent, width, height, depth, x, y, z, mat) => {
         const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), mat);
         mesh.position.set(x, y, z);
@@ -199,45 +296,68 @@
       const protectFromRoad = (object, x, z, radius) => {
         this.stageRoadZones.push({object, x, z, radius});
       };
+      const postBases = [], reflectors = [];
+      // All foreground props terminate before the existing junction boundary starts to curve.
+      for (let z = -151; z <= -19; z += 6.6) {
+        for (const side of [-1, 1]) {
+          const x = side * (this.stage === 3 ? 6.2 : 8.1);
+          postBases.push([x, .33, z, .15, .68, .18]);
+          reflectors.push([x - side * .025, .59, z - .106, .12, .15, .045]);
+        }
+      }
+      boxInstances(postBases, material(this.stage === 3 ? 0x546e87 : 0xc9d8d0));
+      boxInstances(reflectors, basic(this.stage === 3 ? 0x8edcff : 0xffc879));
 
       if (this.stage === 1) {
         const mountain = material(0x5d8e9a);
         const snow = material(0xd9edf0);
-        addMountain(-105, 18, 205, 42, 38, mountain);
-        addMountain(-35, 13, 220, 34, 28, mountain);
-        addMountain(42, 17, 214, 39, 36, mountain);
-        addMountain(108, 12, 228, 34, 27, mountain);
-        addMountain(-105, 35, 194, 11, 12, snow);
-        addMountain(42, 34, 202, 10, 12, snow);
+        addMountain(-105, 18, 234, 42, 38, mountain);
+        addMountain(-35, 13, 244, 34, 28, mountain);
+        addMountain(42, 17, 230, 39, 36, mountain);
+        addMountain(108, 12, 241, 34, 27, mountain);
+        addMountain(-105, 35, 223, 11, 12, snow);
+        addMountain(42, 34, 218, 10, 12, snow);
+        const rocks = [], meadow = [];
+        for (let i = 0; i < 140; i++) {
+          const side = i % 2 ? 1 : -1;
+          const z = -152 + (i * 47) % 134;
+          const x = side * (10 + (i * 29) % 44 * .64);
+          if (i % 9 === 0) rocks.push([x, .21, z, 1.1 + i % 5 * .26, .4, .8, i * .38]);
+          else meadow.push([x, -.01, z, 1.7 + i % 7 * .6, .038, 1.5 + i % 3, i * .3]);
+        }
+        boxInstances(meadow, material(0x617e42));
+        boxInstances(rocks, material(0x758c78));
         return;
       }
 
       if (this.stage === 2) {
         const buildingMats = [material(0xc9b5a9), material(0x9fb4c8), material(0xd4a26e), material(0x9a9bbd)];
-        const windows = basic(0xffe7a3);
+        const glassWindows = [], litWindows = [];
         const pole = material(0x37485a, {metalness:.35, roughness:.55});
         const lamp = basic(0xfff0b0);
-        for (let i = 0; i < 18; i++) {
+        for (let i = 0; i < 24; i++) {
           const side = i % 2 ? 1 : -1;
           const depth = Math.floor(i / 2);
-          const z = -145 + depth * 28;
-          // 建物は分岐後の道路が広がる範囲より外側に置く。道路を横切る壁に見えないための安全余白。
-          const x = side * (96 + (depth % 3) * 13);
-          const width = 8 + (depth % 2) * 5;
-          const height = 10 + (depth * 7) % 22;
-          const buildingGroup = new THREE.Group();
-          buildingGroup.position.set(x, 0, z);
-          buildingGroup.rotation.y = (depth % 3 - 1) * .04;
-          group.add(buildingGroup);
-          addBoxTo(buildingGroup, width, height, 9, 0, height / 2, 0, buildingMats[depth % buildingMats.length]);
-          for (let row = 0; row < Math.floor(height / 4); row++) {
-            for (let column = -1; column <= 1; column += 2) {
-              const wx = column * Math.min(2.2, width * .28);
-              addBoxTo(buildingGroup, 1.25, .85, .06, wx, 2.3 + row * 3.2, -4.54, windows);
+          const z = -142 + depth * 20;
+          // Close buildings are entirely on the straight approach. Beyond it,
+          // even the widest branch stays well inside the far skyline.
+          const x = side * (z < -34 ? 22 + depth % 3 * 7 : 91 + depth % 3 * 8);
+          const width = 9 + (depth % 2) * 5;
+          const height = 10 + (i * 7) % 24;
+          const building = buildingMats[i % buildingMats.length];
+          addBox(width, height, 11, x, height / 2, z, building);
+          addBox(width * .59, 1.8, 6.7, x, height + .9, z, pole);
+          for (let row = 0; row < Math.floor((height - 1.8) / 2.6); row++) {
+            const y = 1.8 + row * 2.6;
+            for (let column = -1; column <= 1; column++) {
+              const batch = (i + row * 3 + column * 7) % 5 === 0 ? litWindows : glassWindows;
+              batch.push([x + column * width * .28, y, z - 5.52, 1.3, 1.01, .06]);
+              batch.push([x - side * (width / 2 + .02), y, z + column * 3.2, .06, 1.01, 1.5]);
             }
           }
-          protectFromRoad(buildingGroup, x, z, Math.max(width, 9) * .7);
         }
+        boxInstances(glassWindows, basic(0x3e536e));
+        boxInstances(litWindows, basic(0xffcf9c));
         // 街灯は分岐前の直線区間だけに置き、曲がった先の走行ラインには入れない。
         for (let i = 0; i < 6; i++) {
           const z = -142 + i * 22;
@@ -268,27 +388,36 @@
       const nightBuilding = material(0x263653);
       const cityLight = basic(0xffd879);
       const mountain = material(0x202d4b);
-      addBox(.72, 2.5, 120, -7.3, 1.25, -82.5, rail);
-      addBox(.72, 2.5, 120, 7.3, 1.25, -82.5, rail);
+      addBox(.38, .88, 136, -6.2, .42, -85, rail);
+      addBox(.38, .88, 136, 6.2, .42, -85, rail);
+      const railLights = [];
       for (let z = -140; z <= -24; z += 14) {
-        addBox(.28, 2.8, .28, -7.3, 1.35, z, concrete);
-        addBox(.28, 2.8, .28, 7.3, 1.35, z, concrete);
+        addBox(.38, 1.12, .38, -6.2, .57, z, concrete);
+        addBox(.38, 1.12, .38, 6.2, .57, z, concrete);
+        railLights.push([-6.2, .98, z - .21, .28, .13, .045], [6.2, .98, z - .21, .28, .13, .045]);
       }
+      boxInstances(railLights, basic(0xabdeff));
       for (let z = -142; z <= 24; z += 42) {
         addCylinder(.62, 20, -5.8, -11, z, concreteDark, 10);
         addCylinder(.62, 20, 5.8, -11, z, concreteDark, 10);
         addBox(14, .7, 1.1, 0, -1.7, z, concrete);
       }
-      for (let i = 0; i < 10; i++) {
-        const z = 160 + i * 8;
-        const x = (i % 2 ? 1 : -1) * (22 + (i % 3) * 8);
-        const height = 8 + (i % 4) * 4;
-        addBox(7, height, 8, x, height / 2 - 20, z, nightBuilding);
-        addBox(1.15, .75, .06, x - 1.8, 1 + (i % 3) * 2 - 20, z - 4.04, cityLight);
-        addBox(1.15, .75, .06, x + 1.8, 1 + (i % 3) * 2 - 20, z - 4.04, cityLight);
+      const nightBlocks = [], nightWindows = [];
+      for (let i = 0; i < 38; i++) {
+        const z = -87 + (i * 17) % 230;
+        const x = (i % 2 ? 1 : -1) * (17 + (i * 23) % 80);
+        const height = 6 + (i * 7) % 13;
+        nightBlocks.push([x, height / 2 - 22, z, 8, height, 9]);
+        for (let y = 1.6; y < height - .6; y += 2.4) {
+          for (let j = -1; j <= 1; j++) {
+            if (Math.round(y + i + j * 7) % 4 !== 0) nightWindows.push([x + j * 2.3, y - 22, z - 4.52, .72, .72, .06]);
+          }
+        }
       }
-      addMountain(-115, -1, 210, 48, 35, mountain);
-      addMountain(115, -1, 220, 55, 42, mountain);
+      boxInstances(nightBlocks, nightBuilding);
+      boxInstances(nightWindows, cityLight);
+      addMountain(-115, -1, 234, 48, 35, mountain);
+      addMountain(115, -1, 242, 55, 42, mountain);
     }
 
     refreshStageSceneryForRoad(outline) {
@@ -316,6 +445,7 @@
       car.traverse(object => {
         if (object.geometry) object.geometry.dispose();
       });
+      for (const material of car.userData.materials) material.dispose();
     }
 
     setVehicle(vehicle = DEFAULT_VEHICLE) {
@@ -334,26 +464,45 @@
       if (position) this.car.position.copy(position);
       if (rotation) this.car.rotation.copy(rotation);
       if (chassisRotation) this.chassis.rotation.copy(chassisRotation);
+      if (this.pausedAt != null) this.render();
     }
 
     createCar(vehicle = this.vehicle || DEFAULT_VEHICLE) {
       const car = new THREE.Group();
+      car.userData.materials = [];
       const chassis = new THREE.Group();
       car.add(chassis);
       this.car = car;
       this.chassis = chassis;
       this.wheels = [];
       this.frontPivots = [];
+      const materials = this.materials;
+      const meshAt = (parent, geometry, material, x, y, z) => {
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(x, y, z);
+        parent.add(mesh);
+        return mesh;
+      };
+      const box = (w, h, d, x, y, z, material) =>
+        meshAt(chassis, new THREE.BoxGeometry(w, h, d), material, x, y, z);
 
       const addWheel = (x, z, radius, front = z > 0) => {
         const pivot = new THREE.Group();
         pivot.position.set(x, radius, z);
         const wheel = new THREE.Group();
-        const tire = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, .42, 18), this.materials.rubber);
+        wheel.userData.radius = radius;
+        const tire = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, .47, 24), materials.rubber);
         tire.rotation.z = Math.PI / 2;
-        const hub = new THREE.Mesh(new THREE.CylinderGeometry(radius * .46, radius * .46, .45, 16), this.materials.wheel);
+        const hub = new THREE.Mesh(new THREE.CylinderGeometry(radius * .62, radius * .62, .48, 20), materials.trim);
         hub.rotation.z = Math.PI / 2;
         wheel.add(tire, hub);
+        const outerX = x === 0 ? 0 : Math.sign(x) * .25;
+        const rim = meshAt(wheel, new THREE.TorusGeometry(radius * .53, .025, 5, 20), materials.wheel, outerX, 0, 0);
+        rim.rotation.y = Math.PI / 2;
+        for (let spoke = 0; spoke < 3; spoke++) {
+          const bar = meshAt(wheel, new THREE.BoxGeometry(.035, .044, radius * 1.02), materials.wheel, outerX, 0, 0);
+          bar.rotation.x = spoke * Math.PI / 3;
+        }
         pivot.add(wheel);
         chassis.add(pivot);
         this.wheels.push(wheel);
@@ -369,7 +518,7 @@
         tank.scale.set(.62, .42, 1.05);
         tank.position.set(0, 1.02, .35);
         chassis.add(tank);
-        const windshield = new THREE.Mesh(new THREE.SphereGeometry(.45, 16, 10), this.materials.glass);
+        const windshield = new THREE.Mesh(new THREE.SphereGeometry(.45, 16, 10), materials.windshield);
         windshield.scale.set(.52, .58, .8);
         windshield.position.set(0, 1.18, .72);
         chassis.add(windshield);
@@ -378,9 +527,11 @@
         chassis.add(handlebar);
         addWheel(0, -1.3, .58, false);
         addWheel(0, 1.3, .58, true);
-        const headlight = new THREE.Mesh(new THREE.SphereGeometry(.14, 12, 8), this.materials.light);
+        const headlight = new THREE.Mesh(new THREE.SphereGeometry(.14, 12, 8), materials.lightCore);
         headlight.position.set(0, 1.28, 1.48);
         chassis.add(headlight);
+        box(.32, .105, .08, 0, .91, -1.19, materials.light);
+        box(.29, .18, .55, 0, .94, -.58, materials.trim);
       } else if (vehicle.style === 'truck') {
         const lower = new THREE.Mesh(new THREE.BoxGeometry(2.35, .58, 4.25), this.materials.blue);
         lower.position.set(0, .63, -.15);
@@ -397,9 +548,9 @@
         const roof = new THREE.Mesh(new THREE.BoxGeometry(2.24, .12, 1.72), this.materials.trim);
         roof.position.set(0, 1.91, .72);
         chassis.add(roof);
-        const stripe = new THREE.Mesh(new THREE.BoxGeometry(2.24, .12, .08), this.materials.marking);
-        stripe.position.set(0, 1.48, -.2);
-        chassis.add(stripe);
+        box(2.26, .87, .08, 0, 1.3, -2.15, materials.trim);
+        box(2.16, .12, .09, 0, 1.65, -2.2, materials.wheel);
+        for (const y of [1.02, 1.18, 1.34, 1.50]) box(1.88, .026, .06, 0, y, -2.21, materials.wheel);
         for (const side of [-1, 1]) {
           addWheel(side * 1.17, -1.32, .55, false);
           addWheel(side * 1.17, .92, .55, true);
@@ -411,65 +562,60 @@
         }
       } else {
         const shape = new THREE.Shape();
-        shape.moveTo(-.82, -2.05);
-        shape.lineTo(-1.22, -1.25);
-        shape.lineTo(-1.03, .55);
-        shape.quadraticCurveTo(-.65, 2.1, 0, 2.65);
-        shape.quadraticCurveTo(.65, 2.1, 1.03, .55);
-        shape.lineTo(1.22, -1.25);
-        shape.lineTo(.82, -2.05);
+        shape.moveTo(-1.13, -1.97);
+        shape.quadraticCurveTo(-1.39, -1.7, -1.32, -1.23);
+        shape.quadraticCurveTo(-1.18, .35, -.96, 1.57);
+        shape.quadraticCurveTo(-.77, 2.18, -.45, 2.36);
+        shape.lineTo(.45, 2.36);
+        shape.quadraticCurveTo(.77, 2.18, .96, 1.57);
+        shape.quadraticCurveTo(1.18, .35, 1.32, -1.23);
+        shape.quadraticCurveTo(1.39, -1.7, 1.13, -1.97);
         shape.closePath();
-        const body = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, {depth: .5, bevelEnabled: true, bevelSize: .12, bevelThickness: .1, bevelSegments: 2}), this.materials.blue);
+        const body = meshAt(chassis, new THREE.ExtrudeGeometry(shape, {
+          depth: .46, bevelEnabled: true, bevelSize: .10, bevelThickness: .12, bevelSegments: 3
+        }), materials.blue, 0, .77, 0);
         body.rotation.x = Math.PI / 2;
-        body.position.y = .82;
-        chassis.add(body);
-        const noseStripe = new THREE.Mesh(new THREE.BoxGeometry(.18, .03, 1.8), this.materials.marking);
-        noseStripe.position.set(0, .91, 1.35);
-        chassis.add(noseStripe);
-        const cockpit = new THREE.Mesh(new THREE.SphereGeometry(.76, 20, 12), this.materials.glass);
-        cockpit.scale.set(.8, .58, 1.4);
-        cockpit.position.set(0, 1, -.17);
-        chassis.add(cockpit);
-        const cockpitRim = new THREE.Mesh(new THREE.BoxGeometry(1.3, .18, 1.8), this.materials.trim);
-        cockpitRim.position.set(0, .66, -.15);
-        chassis.add(cockpitRim);
-        const rearWing = new THREE.Mesh(new THREE.BoxGeometry(3.35, .13, .5), this.materials.trim);
-        rearWing.position.set(0, 1.12, -1.85);
-        chassis.add(rearWing);
-        const wingTrim = new THREE.Mesh(new THREE.BoxGeometry(3.2, .03, .08), this.materials.glass);
-        wingTrim.position.set(0, 1.2, -2.07);
-        chassis.add(wingTrim);
-        const frontWing = new THREE.Mesh(new THREE.BoxGeometry(2.75, .12, .38), this.materials.trim);
-        frontWing.position.set(0, .37, 2.05);
-        chassis.add(frontWing);
+        const canopy = meshAt(chassis, new THREE.SphereGeometry(1, 26, 14), materials.windshield, 0, .84, .02);
+        canopy.scale.set(.71, .63, 1.18);
+        box(.94, .05, .72, 0, .91, -1.43, materials.trim);
+        box(2.42, .27, .20, 0, .62, -1.99, materials.trim);
+        box(2.42, .10, .4, 0, .34, -1.99, materials.trim);
+        box(2.97, .115, .44, 0, 1.32, -1.8, materials.trim).rotation.x = -.09;
+        box(2.88, .050, .075, 0, 1.32, -2.03, materials.glass);
+        box(2.65, .10, .38, 0, .29, 2.03, materials.trim);
+        box(.20, .028, 1.08, 0, .9, 1.65, materials.marking);
+        for (const x of [-.52, -.26, 0, .26, .52]) box(.052, .17, .31, x, .32, -2.07, materials.trim);
         for (const side of [-1, 1]) {
-          const sidePod = new THREE.Mesh(new THREE.BoxGeometry(.43, .32, 1.65), this.materials.blue);
-          sidePod.position.set(side * 1.03, .47, -.1);
-          chassis.add(sidePod);
-          const wingSupport = new THREE.Mesh(new THREE.BoxGeometry(.12, .45, .18), this.materials.trim);
-          wingSupport.position.set(side * .65, .9, -1.85);
-          chassis.add(wingSupport);
-          addWheel(side * 1.12, -1.45, .49, false);
-          addWheel(side * 1.12, 1.35, .49, true);
-        }
-        for (const x of [-.56, .56]) {
-          const tailLight = new THREE.Mesh(new THREE.BoxGeometry(.38, .12, .08), this.materials.light);
-          tailLight.position.set(x, .68, -2.12);
-          chassis.add(tailLight);
+          const shoulder = meshAt(chassis, new THREE.SphereGeometry(1, 20, 12), materials.blue, side * .99, .62, -1.18);
+          shoulder.scale.set(.44, .36, .88);
+          box(.08, .11, 2.01, side * 1.24, .33, .06, materials.wheel);
+          box(.08, .27, .48, side * 1.43, 1.36, -1.80, materials.blue);
+          box(.085, .51, .20, side * .62, 1.06, -1.79, materials.trim).rotation.x = .24;
+          box(.65, .132, .05, side * .84, .75, -2.108, materials.light);
+          box(.52, .026, .023, side * .87, .772, -2.138, materials.lightCore);
+          const outlet = meshAt(chassis, new THREE.CylinderGeometry(.13, .14, .16, 14), materials.wheel, side * .45, .48, -2.15);
+          outlet.rotation.x = Math.PI / 2;
+          const aperture = meshAt(chassis, new THREE.CircleGeometry(.093, 14), materials.rubber, side * .45, .48, -2.232);
+          aperture.rotation.y = Math.PI;
+          addWheel(side * 1.16, -1.38, .48, false);
+          addWheel(side * 1.16, 1.32, .46, true);
         }
       }
       this.exhausts = [];
       const flameMaterial = new THREE.MeshBasicMaterial({color: 0x78eaff, transparent: true, opacity: .85, depthWrite: false});
-      const exhaustPositions = vehicle.style === 'bike' ? [0] : [-.48, .48];
+      car.userData.materials.push(flameMaterial);
+      const exhaustPositions = vehicle.style === 'bike' ? [0] : [-.45, .45];
       for (const x of exhaustPositions) {
         const flame = new THREE.Mesh(new THREE.ConeGeometry(.2, 1.4, 9), flameMaterial);
         flame.rotation.x = -Math.PI / 2;
-        flame.position.set(x, vehicle.style === 'truck' ? .54 : .52, vehicle.style === 'bike' ? -2.05 : -2.75);
+        flame.userData.nozzle = vehicle.style === 'bike' ? -1.72 : -2.24;
+        flame.position.set(x, vehicle.style === 'truck' ? .54 : .48, flame.userData.nozzle);
         flame.visible = false;
         chassis.add(flame);
         this.exhausts.push(flame);
       }
       const shadow = new THREE.Mesh(new THREE.CircleGeometry(1, 24), new THREE.MeshBasicMaterial({color: 0x0e2024, transparent: true, opacity: .27, depthWrite: false}));
+      car.userData.materials.push(shadow.material);
       shadow.rotation.x = -Math.PI / 2;
       shadow.scale.set(vehicle.style === 'bike' ? 1.1 : vehicle.style === 'truck' ? 1.75 : 1.8, vehicle.style === 'bike' ? 2.6 : 3, 1);
       shadow.position.y = .018;
@@ -487,6 +633,7 @@
       this.renderer.setSize(width, height, false);
       this.camera.aspect = width / height;
       this.camera.updateProjectionMatrix();
+      if (this.pausedAt != null) this.render();
     }
 
     addStrips(parent, paths, width, material, y = .025) {
@@ -589,58 +736,79 @@
       for (let i = 0; i < this.trees.length; i++) {
         const tree = this.trees[i];
         const clear = ![-5, 0, 5].some(dx => [-5, 0, 5].some(dz => G.containsPoint(outline, {x: tree.x + dx, z: tree.z + dz})));
-        treeTransform.scale.setScalar(clear ? 1 : 0);
+        const scale = clear ? .75 + (i % 5) * .13 : 0;
+        treeTransform.scale.setScalar(scale);
         treeTransform.position.set(tree.x, 1.1, tree.z);
         treeTransform.updateMatrix();
         this.treeTrunks.setMatrixAt(i, treeTransform.matrix);
         treeTransform.position.y = 4.1;
         treeTransform.updateMatrix();
         this.treeLeaves.setMatrixAt(i, treeTransform.matrix);
+        treeTransform.scale.setScalar(scale * .67);
+        treeTransform.position.y += 1.78 * scale;
+        treeTransform.updateMatrix();
+        this.treeTops.setMatrixAt(i, treeTransform.matrix);
       }
       this.treeTrunks.instanceMatrix.needsUpdate = true;
       this.treeLeaves.instanceMatrix.needsUpdate = true;
+      this.treeTops.instanceMatrix.needsUpdate = true;
     }
 
-    reset(count) {
+    reset(count, {approachSeconds = 10, parked = false} = {}) {
       this.count = count;
-      this.createRoad(count);
-      this.car.position.set(0, 0, -55);
+      if (this.road?.count !== count || this.roadStage !== this.stage) {
+        this.createRoad(count);
+        this.roadStage = this.stage;
+      }
+      this.car.position.set(0, 0, APPROACH_START);
       this.car.rotation.set(0, 0, 0);
       this.chassis.rotation.set(0, 0, 0);
-      this.phase = 'approach';
+      for (const pivot of this.frontPivots) pivot.rotation.y = 0;
+      for (const flame of this.exhausts) flame.visible = false;
+      this.phase = parked ? 'parked' : 'approach';
       this.phaseStartedAt = performance.now();
-      this.pausedAt = null;
-      this.travelSpeed = 4;
+      this.pausedAt = parked ? this.phaseStartedAt : null;
+      this.approachSpeed = (APPROACH_LIMIT - APPROACH_START) / approachSeconds;
+      this.travelSpeed = parked ? 0 : this.approachSpeed;
       this.boost = 0;
       this.forward.set(0, 0, 1);
-      const cameraHeight = this.stage === 3 ? 10.8 : 7.8;
-      this.camera.position.set(0, cameraHeight, -70);
-      this.lookTarget.set(0, this.stage === 3 ? 2 : 1, -35);
+      this.camera.fov = BASE_FOV;
+      this.camera.updateProjectionMatrix();
+      this.camera.up.set(0, 1, 0);
+      this.camera.position.set(0, this.stage === 3 ? 7.2 : 5.8, APPROACH_START - 11.5);
+      this.lookTarget.set(0, 1.25, APPROACH_START + 14);
       this.camera.lookAt(this.lookTarget);
       this.render();
     }
 
+    updateApproach(now) {
+      const elapsed = Math.max(0, (now - this.phaseStartedAt) / 1000);
+      const z = APPROACH_START + elapsed * this.approachSpeed;
+      this.car.position.z = Math.min(APPROACH_LIMIT, z);
+      this.travelSpeed = z < APPROACH_LIMIT ? this.approachSpeed : 0;
+    }
+
     startTurn(index, correct) {
       this.setPaused(false);
-      if (this.phase === 'approach') {
-        this.car.position.z = Math.min(-14, -55 + 4 * Math.max(0, (performance.now() - this.phaseStartedAt) / 1000));
-      }
+      const now = performance.now();
+      if (this.phase === 'approach') this.updateApproach(now);
       const route = G.createRoute(this.count, index, this.car.position.z);
-      this.route = G.sampleRouteByDistance(route, 320);
-      this.phaseStartedAt = performance.now();
+      const samples = 320;
+      this.route = G.sampleRouteByDistance(route, samples);
+      this.phaseStartedAt = now;
       this.turnDuration = 3.8;
       this.turnCorrect = correct;
       this.phase = 'turn';
       this.boost = 0;
-      this.initialSpeedRatio = Math.min(.65, this.travelSpeed * this.turnDuration / Math.max(1, this.route.length));
+      this.boostDistance = this.route.distances[Math.round(samples * (route.straightPortion + (1 - route.straightPortion) * .64))];
+      this.turnLength = this.route.length * (correct ? 1 : .85);
+      this.initialSpeedRatio = Math.min(.65, this.travelSpeed * this.turnDuration / Math.max(1, this.turnLength));
     }
 
     stop() {
       this.setPaused(false);
-      if (this.phase === 'approach') {
-        this.car.position.z = Math.min(-14, -55 + 4 * Math.max(0, (performance.now() - this.phaseStartedAt) / 1000));
-      }
       this.stopStartZ = this.car.position.z;
+      this.stopSpeed = Math.min(this.approachSpeed, this.travelSpeed);
       this.phaseStartedAt = performance.now();
       this.phase = 'stopping';
     }
@@ -655,23 +823,27 @@
     }
 
     update(dt, time) {
-      this.time = time;
       this.resize();
       if (this.pausedAt !== null) return;
+      const reducedMotion = this.reducedMotion?.matches;
+      let steering = 0;
       if (this.phase === 'approach') {
-        this.travelSpeed = 4;
-        this.car.position.z = Math.min(-14, -55 + 4 * Math.max(0, (performance.now() - this.phaseStartedAt) / 1000));
+        this.updateApproach(performance.now());
       } else if (this.phase === 'stopping') {
         const t = clamp((performance.now() - this.phaseStartedAt) / 850, 0, 1);
-        this.travelSpeed = 4 * (1 - t);
-        this.car.position.z = this.stopStartZ + 4 * .85 * (t - .5 * t * t);
+        this.travelSpeed = this.stopSpeed * (1 - t);
+        this.car.position.z = Math.min(APPROACH_LIMIT, this.stopStartZ + this.stopSpeed * .85 * (t - .5 * t * t));
         this.boost = 0;
       } else if (this.phase === 'turn') {
         const elapsed = Math.max(0, (performance.now() - this.phaseStartedAt) / 1000);
         const t = clamp(elapsed / this.turnDuration, 0, 1);
         const m = this.initialSpeedRatio;
-        const fraction = m * t + (1 - m) * t * t;
-        const distance = this.route.length * fraction;
+        // Match the approach speed, then build speed through the corner.
+        // Correct routes have a steeper acceleration curve towards the exit.
+        const surge = this.turnCorrect ? .26 : 0;
+        const ease = (1 - surge) * t * t + surge * t ** 4;
+        const fraction = m * t + (1 - m) * ease;
+        const distance = this.turnLength * fraction;
         const p = G.pointAtDistance(this.route, distance);
         const a = G.pointAtDistance(this.route, Math.max(0, distance - .3));
         const b = G.pointAtDistance(this.route, Math.min(this.route.length, distance + .3));
@@ -682,26 +854,35 @@
         this.car.position.set(p.x, 0, p.z);
         this.car.rotation.y = heading;
         this.forward.set(Math.sin(heading), 0, Math.cos(heading));
-        const angularSpeed = clamp((heading - previousHeading) / Math.max(dt, .001), -1, 1);
-        this.chassis.rotation.z += (clamp(-angularSpeed * .25, -.17, .17) - this.chassis.rotation.z) * damp(6, dt);
-        for (const pivot of this.frontPivots) pivot.rotation.y += (clamp(angularSpeed * 1.3, -.42, .42) - pivot.rotation.y) * damp(8, dt);
-        this.travelSpeed = this.route.length / this.turnDuration * (m + 2 * (1 - m) * t);
-        this.boost += ((this.turnCorrect && t > .68 ? 1 : 0) - this.boost) * damp(4, dt);
+        steering = clamp((heading - previousHeading) / Math.max(dt, .001), -1, 1);
+        this.chassis.rotation.z += (-steering * (this.vehicle.style === 'bike' ? .33 : .17) - this.chassis.rotation.z) * damp(6, dt);
+        for (const pivot of this.frontPivots) pivot.rotation.y += (clamp(steering, -.42, .42) - pivot.rotation.y) * damp(8, dt);
+        const velocity = m + (1 - m) * (2 * (1 - surge) * t + 4 * surge * t ** 3);
+        this.travelSpeed = this.turnLength / this.turnDuration * velocity;
+        const onExit = t > .68 && distance >= this.boostDistance;
+        this.boost += ((this.turnCorrect && onExit ? 1 : 0) - this.boost) * damp(9, dt);
       }
-      for (const wheel of this.wheels) wheel.rotation.x += this.travelSpeed * dt / .49;
+      for (const wheel of this.wheels) wheel.rotation.x += this.travelSpeed * dt / wheel.userData.radius;
       for (const flame of this.exhausts) {
         flame.visible = this.boost > .05;
-        flame.scale.y = .6 + this.boost * (.8 + Math.sin(time * 34) * .12);
+        const length = .45 + this.boost * (1.15 + Math.sin(time * 37) * .13);
+        flame.scale.y = length;
+        flame.position.z = flame.userData.nozzle - length * .7;
       }
 
       if (!this.debugTopDown) {
-        this.camera.up.set(0, 1, 0);
-        const speedBob = Math.sin(time * 18) * Math.min(.06, this.travelSpeed * .0015);
-        const desired = this.car.position.clone().addScaledVector(this.forward, -14);
-        desired.y = (this.stage === 3 ? 10.8 : 7.8) + speedBob;
-        this.camera.position.lerp(desired, damp(5, dt));
-        const target = this.car.position.clone().addScaledVector(this.forward, 15);
-        target.y = this.stage === 3 ? 2 : 1.2;
+        const intensity = clamp(this.travelSpeed / 49, 0, 1);
+        const cameraEffect = reducedMotion ? 0 : intensity;
+        const wantedFov = BASE_FOV + cameraEffect * 7 + (reducedMotion ? 0 : this.boost * 5);
+        this.camera.fov += (wantedFov - this.camera.fov) * damp(5, dt);
+        this.camera.updateProjectionMatrix();
+        this.camera.up.set(reducedMotion ? 0 : steering * .048, 1, 0);
+        const speedBob = Math.sin(time * 22) * cameraEffect * .055;
+        const desired = this.followPosition.copy(this.car.position).addScaledVector(this.forward, -11.5 - cameraEffect * 1.2);
+        desired.y = (this.stage === 3 ? 7.2 : 5.8) + speedBob - cameraEffect * .55;
+        this.camera.position.lerp(desired, damp(7, dt));
+        const target = this.followTarget.copy(this.car.position).addScaledVector(this.forward, 14 + intensity * 4);
+        target.y = 1.25;
         this.lookTarget.lerp(target, damp(4.5, dt));
         this.camera.lookAt(this.lookTarget);
       } else {
@@ -712,7 +893,10 @@
       this.render();
     }
 
-    render() { this.renderer.render(this.scene, this.camera); }
+    render() {
+      this.sky.position.copy(this.camera.position);
+      this.renderer.render(this.scene, this.camera);
+    }
   }
 
   root.DriveScene = DriveScene;

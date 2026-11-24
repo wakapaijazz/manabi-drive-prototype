@@ -1,7 +1,7 @@
-const CACHE = 'manabi-drive-v19-cockpit';
+const CACHE = 'manabi-drive-v20-apex';
 const RESOURCES = [
-  './', './index.html', './style.css?v=cockpit', './questions.js?v=stages5', './app.js?v=cockpit',
-  './vendor/three.min.js', './road-geometry.js?v=stages5', './drive-3d.js?v=stages5',
+  './', './index.html', './style.css?v=apex', './questions.js?v=stages5', './app.js?v=apex',
+  './vendor/three.min.js', './road-geometry.js?v=stages5', './drive-3d.js?v=apex', './drive-audio.js?v=apex',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'
 ];
 self.addEventListener('install', (event) => {

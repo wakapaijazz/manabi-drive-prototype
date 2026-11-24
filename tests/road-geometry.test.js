@@ -45,7 +45,7 @@ for (const count of [2, 3, 4]) {
   polygonArea = Math.abs(polygonArea / 2);
   assert.ok(Math.abs(trianglesArea - polygonArea) < polygonArea * 1e-5, `${count} exits: road triangles leave a gap or overlap`);
   mesh.dispose();
-  for (const start of [-60, -35, -12]) {
+  for (const start of [-84, -60, -35, -12]) {
     for (let index = 0; index < count; index++) {
       const route = roadGeometry.createRoute(count, index, start);
       if (count === 2) {

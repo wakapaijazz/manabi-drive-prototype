@@ -56,17 +56,19 @@ vm.runInNewContext(fs.readFileSync(path.join(root, 'service-worker.js'), 'utf8')
     assert.ok(response, `request was not intercepted: ${relative}`);
     return response;
   }
-  const script = await offlineFetch('drive-3d.js?v=stages5', 'script');
+  const script = await offlineFetch('drive-3d.js?v=apex', 'script');
   assert.match(await script.text(), /class DriveScene/);
   const questions = await offlineFetch('questions.js?v=stages5', 'script');
   const questionsText = await questions.text();
   assert.match(questionsText, /ensureAnswerChoice/);
   assert.match(questionsText, /KANJI_SENTENCES/);
   assert.match(questionsText, /MATH_LEVELS/);
-  const stylesheet = await offlineFetch('style.css?v=cockpit', 'style');
+  const stylesheet = await offlineFetch('style.css?v=apex', 'style');
   assert.match(await stylesheet.text(), /\.cockpit/);
-  const app = await offlineFetch('app.js?v=cockpit', 'script');
-  assert.match(await app.text(), /settingsToggle/);
+  const app = await offlineFetch('app.js?v=apex', 'script');
+  assert.match(await app.text(), /startGame/);
+  const audio = await offlineFetch('drive-audio.js?v=apex', 'script');
+  assert.match(await audio.text(), /class DriveAudio/);
   const page = await offlineFetch('?offline-test', 'document', 'navigate');
   assert.match(await page.text(), /まなびドライブ/);
   const missing = await offlineFetch('missing.js?v=stages5', 'script');

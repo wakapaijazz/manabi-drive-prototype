@@ -233,6 +233,20 @@ button:focus-visible, select:focus-visible { outline: 3px solid #faf6cb; outline
 .question-overline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; color: var(--accent); font-size: .875rem; font-weight: 800; }
 .grade-chip { padding: 0 6px; border: 1px solid #60718d; border-radius: 4px; font-size: .75rem; color: var(--ink); }
 .question-main h2 { margin: 4px 0 0; font-size: clamp(1.23rem, 2.5vw, 2.1rem); font-weight: 850; line-height: 1.35; overflow-wrap: anywhere; }
+.start-panel h2 { margin: 0; font-size: clamp(1.1rem, 2.45vw, 1.9rem); line-height: 1.35; }
+.start-panel p { margin: 4px 0 0; color: var(--muted); font-size: .875rem; }
+.start-button {
+  min-height: 46px;
+  padding: 8px clamp(14px, 3vw, 30px);
+  flex: none;
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 900;
+  box-shadow: 0 3px 0 #0a1421;
+}
+.start-button:hover { filter: brightness(1.1); }
 .speak-button { margin-top: 8px; }
 
 .question-visual { display: grid; place-items: center; max-width: 100%; }
@@ -296,7 +310,19 @@ button:focus-visible, select:focus-visible { outline: 3px solid #faf6cb; outline
 .world.is-wrong-route::before { background: radial-gradient(ellipse at 50% 80%, #ffc09e66, transparent 54%); animation: route-flash .65s ease-out; }
 @keyframes route-flash { 24% { opacity: 1; } }
 .world::after { background: linear-gradient(0deg, #080e1a50, transparent 19%); }
-.answer-timer, .boss-badge, .world-tip {
+.speed-streaks {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: conic-gradient(from 0deg at 50% 46%, transparent 0deg 55deg, #d3ecfa55 56deg, transparent 57deg 69deg, #f3fbffb0 70deg, transparent 71deg 83deg, #d3ecfa44 84deg, transparent 85deg 107deg, #e5f8ff9e 108deg, transparent 109deg 244deg, #e5f8ff99 245deg, transparent 246deg 264deg, #d3ecfa55 265deg, transparent 266deg 286deg, #f3fbffb0 287deg, transparent 288deg 302deg, #d3ecfa66 303deg, transparent 304deg);
+  mask-image: linear-gradient(90deg, #000 0, transparent 27% 73%, #000 100%);
+  transition: opacity .2s ease;
+}
+.world.at-speed .speed-streaks { opacity: .4; }
+.world.is-boosting .speed-streaks { opacity: .85; }
+.answer-timer, .boss-badge, .world-tip, .speedometer {
   position: absolute;
   z-index: 2;
   border: 1px solid #b6c9e177;
@@ -314,6 +340,19 @@ button:focus-visible, select:focus-visible { outline: 3px solid #faf6cb; outline
 .world.is-driving .answer-timer { opacity: 0; }
 .boss-badge { top: 10px; left: 10px; border-color: #ffd089; border-radius: 6px; background: #472e11; color: #ffe2a8; padding: 5px 8px; font-size: .8rem; }
 .world-tip { left: 10px; bottom: 10px; max-width: calc(100% - 20px); border-radius: 6px; padding: 4px 8px; font-size: .8rem; pointer-events: none; }
+.speedometer {
+  right: 10px;
+  bottom: 10px;
+  min-width: 78px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font: 750 .75rem/1.2 ui-monospace, Consolas, monospace;
+  text-align: right;
+  pointer-events: none;
+}
+.speedometer strong { font-size: 1.18rem; }
+#boostLabel { display: block; margin-bottom: 2px; color: #a8f6ff; letter-spacing: .12em; }
+.world.is-boosting .speedometer { border-color: #9be9ff; }
 
 .road-choices {
   display: grid;
@@ -497,6 +536,7 @@ kbd {
   .timer-label strong { font-size: 1.2rem; }
   .boss-badge { top: 6px; left: 6px; }
   .world-tip { left: 6px; bottom: 6px; }
+  .speedometer { right: 6px; bottom: 6px; }
   .road-choices { gap: 5px; padding: 6px; }
   .road-choice { min-height: 58px; padding: 5px 6px 6px; }
   .road-choice strong { font-size: .94rem; }
@@ -508,4 +548,5 @@ kbd {
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+  .speed-streaks { display: none; }
 }

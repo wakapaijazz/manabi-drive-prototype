@@ -4,7 +4,7 @@
   const $ = (id) => document.getElementById(id);
   const MAX_QUESTIONS = 10;
   const AUTO_ADVANCE_MS = 4000;
-  const DEFAULT_ANSWER_LIMIT_MS = 10000;
+  const DEFAULT_ANSWER_SECONDS = 10;
   const STAGES = {
     1: {number:'ステージ 01', name:'にじいろの そうげん', badge:'🌤️', theme:'stage-1'},
     2: {number:'ステージ 02', name:'サンセット・シティ', badge:'🌇', theme:'stage-2'},
@@ -45,17 +45,19 @@
     tabs: [...document.querySelectorAll('[data-subject]')],
     topic: $('topicSelect'), stage: $('stageSelect'), grade: $('gradeSelect'), gradeWrap: $('gradeWrap'),
     stageNumber: $('stageNumber'), stageName: $('stageName'), stageBadge: $('stageBadge'), gamePane: $('gamePane'),
+    startPanel: $('startPanel'), start: $('startButton'), questionPanel: $('questionPanel'),
     qKind: $('questionKind'), qGrade: $('questionGrade'), qText: $('questionText'), visual: $('questionVisual'),
     choices: [], roadChoices: $('roadChoices'),
     vehicleChoices: $('vehicleChoices'), vehicleProgress: $('vehicleProgress'),
     settingsToggle: $('settingsToggle'),
     world: $('world'), canvas: $('driveCanvas'), bossBadge: $('bossBadge'), worldTip: $('worldTip'),
+    speed: $('speedValue'), speedometer: $('speedometer'), boostLabel: $('boostLabel'),
     answerTimer: $('answerTimer'), answerTime: $('answerTime'), answerTimerFill: $('answerTimerFill'),
     feedback: $('feedback'), fIcon: $('feedbackIcon'), fTitle: $('feedbackTitle'), fText: $('feedbackText'),
     next: $('nextButton'), coins: $('coinCount'), streak: $('streakCount'), counter: $('questionCounter'),
     progress: $('progressFill'), progressTrack: $('progressTrack'), sound: $('soundButton'),
     speak: $('speakButton'), restart: $('restartButton'), finish: $('finishOverlay'),
-    dialog: document.querySelector('.finish-dialog'), playAgain: $('playAgain'),
+    page: document.querySelector('.page'), playAgain: $('playAgain'),
     finishCorrect: $('finishCorrect'), finishCoins: $('finishCoins'), finishSummary: $('finishSummary'), finishStars: $('finishStars')
   };
 
@@ -72,20 +74,15 @@
   ];
   let unlockedVehicles = new Set(['blue-racer']);
   let swipeStart = null;
-  let audioContext = null;
-  const audio = {
-    master: null, engineOutput: null, engineFilter: null,
-    engineOsc: null, engineHarmonic: null, engineSub: null,
-    engineNoise: null, engineNoiseGain: null, noiseBuffer: null
-  };
+  const audio = new window.DriveAudio();
+  let session = 'ready';
   let advanceTimer = null;
   let answerTimer = null;
   let answerLastTick = 0;
   const playAreas = [el.world, el.roadChoices];
   const visiblePlayAreas = new Set();
   const drive = {
-    scene: null, lastTime: 0, frame: 0, speed: .2, boost: 0,
-    choiceCount: 2, isBoss: false
+    scene: null, lastTime: 0, speed: 0, boosting: false
   };
 
   function saveLocal(key, value) {
@@ -124,7 +121,8 @@
     if (drive.scene) drive.scene.setStage(state.stage);
   }
 
-  function resetGame() {
+  function prepareGame() {
+    session = 'ready';
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     clearAdvanceTimer();
     clearAnswerTimer();
@@ -132,11 +130,33 @@
     state = {subject, topic, stage, grade, sound, vehicleId, number:1, question:null, coins:0, streak:0, correct:0, wrong:0, locked:false, mistakes:[], recent:[]};
     updateStage();
     el.finish.hidden = true;
+    el.page.inert = false;
+    el.startPanel.hidden = false;
+    el.questionPanel.hidden = el.roadChoices.hidden = true;
+    el.answerTimer.hidden = el.worldTip.hidden = el.bossBadge.hidden = true;
+    el.world.setAttribute('aria-label', 'スタートまえの コース');
+    el.choices = [];
+    el.roadChoices.replaceChildren();
     renderVehicleChoices();
     applySelectedVehicle();
     resetDriveAnimation();
+    if (drive.scene) drive.scene.reset(2, {parked:true});
+    updateDriveReadout(0, 0);
+    audio.update(0, 0, false);
     el.feedback.hidden = true;
+    updateHud();
+  }
+
+  function startGame() {
+    if (session !== 'ready') return;
+    session = 'running';
+    el.startPanel.hidden = true;
+    el.questionPanel.hidden = el.roadChoices.hidden = false;
+    el.answerTimer.hidden = el.worldTip.hidden = false;
+    if (state.sound) audio.unlock();
     nextQuestion();
+    el.qText.focus({preventScroll:true});
+    el.roadChoices.scrollIntoView({block:'nearest', behavior:'instant'});
   }
 
   function nextQuestion() {
@@ -189,10 +209,8 @@
       return button;
     });
     const isBoss = count > 2;
-    drive.choiceCount = count;
-    drive.isBoss = isBoss;
     if (drive.scene) {
-      drive.scene.reset(count);
+      drive.scene.reset(count, {approachSeconds: answerLimitSeconds(q)});
       drive.scene.setPaused(!canAnswerNow());
     }
     el.world.classList.toggle('is-boss', isBoss);
@@ -209,12 +227,12 @@
   function updateHud() {
     el.coins.textContent = state.coins;
     el.streak.textContent = state.streak;
-    el.counter.textContent = Math.min(state.number, MAX_QUESTIONS);
+    el.counter.textContent = session === 'ready' ? 0 : Math.min(state.number, MAX_QUESTIONS);
     updateProgress(Math.max(0, state.number - 1));
   }
 
   function choose(which) {
-    if (state.locked || el.finish.hidden === false) return;
+    if (session !== 'running' || state.locked) return;
     const q = state.question;
     if (!q) return;
     clearAnswerTimer();
@@ -225,12 +243,12 @@
       state.streak++;
       state.coins += 10 + (state.streak % 3 === 0 ? 5 : 0);
       advanceVehicleProgression();
-      playFeedbackSound(true);
+      audio.feedback(true);
     } else {
       state.wrong++;
       state.streak = 0;
       state.mistakes.push(q);
-      playFeedbackSound(false);
+      audio.feedback(false);
     }
 
     startDriveAnimation(which, right, q.choiceCount || q.choices.length);
@@ -259,13 +277,17 @@
     }
   }
 
+  function answerLimitSeconds(question) {
+    return clamp(Number(question?.timeLimitSec) || DEFAULT_ANSWER_SECONDS, DEFAULT_ANSWER_SECONDS, 20);
+  }
+
   function startAnswerTimer() {
     clearAnswerTimer();
-    const limitMs = Math.max(DEFAULT_ANSWER_LIMIT_MS, Math.min(20000, Number(state.question?.timeLimitSec || 10) * 1000));
+    const limitMs = answerLimitSeconds(state.question) * 1000;
     let remaining = limitMs;
     answerLastTick = performance.now();
     const tick = () => {
-      if (state.locked || el.finish.hidden === false) return;
+      if (session !== 'running' || state.locked) return;
       const now = performance.now();
       if (canAnswerNow()) remaining = Math.max(0, remaining - (now - answerLastTick));
       answerLastTick = now;
@@ -285,13 +307,14 @@
 
   function canAnswerNow() {
     const playAreaInView = !('IntersectionObserver' in window) || visiblePlayAreas.size === playAreas.length;
-    return playAreaInView && document.visibilityState !== 'hidden';
+    return session === 'running' && playAreaInView && document.visibilityState !== 'hidden';
   }
 
   function onGameVisibilityChanged() {
     // Changing visibility must not charge the child for time spent off-screen.
     answerLastTick = performance.now();
     if (drive.scene && !state.locked) drive.scene.setPaused(!canAnswerNow());
+    if (document.visibilityState === 'hidden') audio.update(0, 0, false);
   }
 
   function timeoutQuestion() {
@@ -301,7 +324,7 @@
     state.wrong++;
     state.streak = 0;
     state.mistakes.push(q);
-    playFeedbackSound(false);
+    audio.feedback(false);
     el.world.classList.add('is-driving', 'is-wrong-route');
     el.worldTip.textContent = 'じかんぎれ！ いったん とまろう';
     if (drive.scene) drive.scene.stop();
@@ -312,14 +335,14 @@
     el.feedback.classList.add('is-error');
     el.fIcon.textContent = '⏰';
     el.fTitle.textContent = 'タイムアップ！';
-    el.fText.textContent = `${q.timeLimitSec || 10}びょう たったよ。${q.explanation}`;
+    el.fText.textContent = `${answerLimitSeconds(q)}びょう たったよ。${q.explanation}`;
     updateProgress(state.number);
     el.streak.textContent = state.streak;
     scheduleAdvance();
   }
 
   function advance() {
-    if (!state.locked) return;
+    if (session !== 'running' || !state.locked) return;
     clearAdvanceTimer();
     state.number += 1;
     nextQuestion();
@@ -353,22 +376,14 @@
   }
 
   function resetDriveAnimation() {
-    el.world.classList.remove('is-driving', 'is-turning-left', 'is-turning-right', 'is-correct-route', 'is-wrong-route', 'is-boss');
-    drive.boost = 0;
-    drive.choiceCount = 2;
-    drive.isBoss = false;
+    el.world.classList.remove('is-driving', 'is-correct-route', 'is-wrong-route', 'is-boss');
   }
 
   function startDriveAnimation(which, right, choiceCount = 2) {
-    drive.choiceCount = choiceCount;
-    drive.isBoss = choiceCount > 2;
-    const turnSide = choiceCount === 2 ? (which === 0 ? -1 : 1) : ((which / (choiceCount - 1)) * 2 - 1);
     el.worldTip.textContent = choiceCount === 2
       ? (which === 0 ? 'ひだりの みちへ！' : 'みぎの みちへ！')
       : `${which + 1}ばんの みちへ！`;
     el.world.classList.add('is-driving', right ? 'is-correct-route' : 'is-wrong-route');
-    el.world.classList.toggle('is-turning-left', turnSide < -.18);
-    el.world.classList.toggle('is-turning-right', turnSide > .18);
     if (drive.scene) drive.scene.startTurn(which, right);
   }
 
@@ -380,13 +395,14 @@
       applySelectedVehicle();
       window.addEventListener('resize', () => drive.scene.resize(), {passive: true});
       drive.lastTime = performance.now();
-      drive.frame = window.requestAnimationFrame(renderDriveFrame);
+      window.requestAnimationFrame(renderDriveFrame);
     } catch (error) {
       console.error('3D rendering is unavailable:', error);
       const message = document.createElement('div');
       message.className = 'drive-fallback';
       message.textContent = '3Dの どうろを ひょうじできません。あたらしいブラウザで ためしてね。';
       el.world.append(message);
+      el.speedometer.hidden = true;
     }
   }
 
@@ -439,21 +455,43 @@
     const dt = Math.min(.25, Math.max(0, (now - drive.lastTime) / 1000));
     drive.lastTime = now;
     drive.scene.update(dt, now / 1000);
-    drive.speed = Math.min(1.6, drive.scene.travelSpeed / 18);
-    drive.boost = drive.scene.boost;
-    updateEngineSound();
-    drive.frame = window.requestAnimationFrame(renderDriveFrame);
+    const active = session === 'running' && document.visibilityState !== 'hidden' && drive.scene.pausedAt === null;
+    const speed = active ? drive.scene.travelSpeed : 0;
+    const boost = active ? drive.scene.boost : 0;
+    updateDriveReadout(speed, boost);
+    audio.update(speed, boost, active, selectedVehicle().style);
+    window.requestAnimationFrame(renderDriveFrame);
+  }
+
+  function updateDriveReadout(speed, boost) {
+    const kmh = Math.round(speed * 3.6);
+    if (drive.speed !== kmh) {
+      drive.speed = kmh;
+      el.speed.textContent = kmh;
+      el.world.classList.toggle('at-speed', kmh >= 112);
+    }
+    const boosting = boost > .22;
+    if (drive.boosting !== boosting) {
+      drive.boosting = boosting;
+      el.world.classList.toggle('is-boosting', boosting);
+      el.boostLabel.hidden = !boosting;
+    }
   }
 
   function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
   function showFinish() {
+    session = 'finished';
+    if (drive.scene) drive.scene.setPaused(true);
+    updateDriveReadout(0, 0);
+    audio.update(0, 0, false);
     const stars = state.correct >= 9 ? 3 : state.correct >= 6 ? 2 : 1;
     el.finishStars.textContent = '⭐'.repeat(stars) + '☆'.repeat(3 - stars);
     el.finishCoins.textContent = state.coins;
     el.finishCorrect.textContent = state.correct;
     el.finishSummary.textContent = state.correct >= 8 ? 'すごい！ きょうも たくさん まなんだね！' : 'ゴールに とうちゃく！ なんどでも チャレンジしてね。';
     el.finish.hidden = false;
-    el.dialog.focus();
+    el.page.inert = true;
+    el.playAgain.focus();
     const key = `manabi-drive-best-${state.subject}`;
     const prev = readLocal(key, 0);
     if (state.coins > prev) saveLocal(key, state.coins);
@@ -553,162 +591,6 @@
     }
   }
 
-  function getAudioContext() {
-    try {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) return null;
-      if (!audioContext) {
-        audioContext = new Ctx();
-        audio.master = audioContext.createGain();
-        audio.master.gain.value = .55;
-        audio.master.connect(audioContext.destination);
-      }
-      if (audioContext.state === 'suspended') audioContext.resume();
-      return audioContext;
-    } catch (_) { return null; }
-  }
-
-  function getNoiseBuffer(ctx) {
-    if (audio.noiseBuffer) return audio.noiseBuffer;
-    const length = Math.floor(ctx.sampleRate * .9);
-    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < length; i++) data[i] = (Math.random() * 2 - 1) * .45;
-    audio.noiseBuffer = buffer;
-    return buffer;
-  }
-
-  function startEngineSound() {
-    if (!state.sound) return null;
-    const ctx = getAudioContext();
-    if (!ctx) return null;
-    if (audio.engineOsc) {
-      audio.engineOutput.gain.setTargetAtTime(.035, ctx.currentTime, .08);
-      return ctx;
-    }
-
-    const mixer = ctx.createGain();
-    mixer.gain.value = .8;
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = 430;
-    filter.Q.value = .9;
-    const output = ctx.createGain();
-    output.gain.value = .0001;
-    mixer.connect(filter); filter.connect(output); output.connect(audio.master);
-
-    const osc = ctx.createOscillator();
-    const oscGain = ctx.createGain();
-    osc.type = 'sawtooth'; osc.frequency.value = 58; oscGain.gain.value = .16;
-    osc.connect(oscGain); oscGain.connect(mixer);
-
-    const harmonic = ctx.createOscillator();
-    const harmonicGain = ctx.createGain();
-    harmonic.type = 'triangle'; harmonic.frequency.value = 116; harmonicGain.gain.value = .1;
-    harmonic.connect(harmonicGain); harmonicGain.connect(mixer);
-
-    const sub = ctx.createOscillator();
-    const subGain = ctx.createGain();
-    sub.type = 'sine'; sub.frequency.value = 29; subGain.gain.value = .24;
-    sub.connect(subGain); subGain.connect(mixer);
-
-    const noise = ctx.createBufferSource();
-    const noiseFilter = ctx.createBiquadFilter();
-    const noiseGain = ctx.createGain();
-    noise.buffer = getNoiseBuffer(ctx); noise.loop = true;
-    noiseFilter.type = 'lowpass'; noiseFilter.frequency.value = 180;
-    noiseGain.gain.value = .035;
-    noise.connect(noiseFilter); noiseFilter.connect(noiseGain); noiseGain.connect(mixer);
-
-    osc.start(); harmonic.start(); sub.start(); noise.start();
-    audio.engineOsc = osc;
-    audio.engineHarmonic = harmonic;
-    audio.engineSub = sub;
-    audio.engineNoise = noise;
-    audio.engineNoiseGain = noiseGain;
-    audio.engineFilter = filter;
-    audio.engineOutput = output;
-    output.gain.setTargetAtTime(.025, ctx.currentTime, .12);
-    return ctx;
-  }
-
-  function updateEngineSound() {
-    if (!audioContext || !audio.engineOsc || !audio.engineOutput) return;
-    const now = audioContext.currentTime;
-    const rpm = 54 + drive.speed * 82 + drive.boost * 120;
-    const volume = state.sound ? .009 + drive.speed * .022 + drive.boost * .035 : .0001;
-    audio.engineOsc.frequency.setTargetAtTime(rpm, now, .035);
-    audio.engineHarmonic.frequency.setTargetAtTime(rpm * 2.01, now, .035);
-    audio.engineSub.frequency.setTargetAtTime(rpm * .5, now, .05);
-    audio.engineFilter.frequency.setTargetAtTime(300 + drive.speed * 330 + drive.boost * 520, now, .07);
-    audio.engineOutput.gain.setTargetAtTime(volume, now, .08);
-  }
-
-  function setSoundEnabled(enabled) {
-    if (enabled) startEngineSound();
-    else if (audioContext && audio.engineOutput) audio.engineOutput.gain.setTargetAtTime(.0001, audioContext.currentTime, .06);
-  }
-
-  function playTone(ctx, frequency, when, duration, type, gain, slideTo = null) {
-    const oscillator = ctx.createOscillator();
-    const volume = ctx.createGain();
-    oscillator.type = type;
-    oscillator.frequency.setValueAtTime(frequency, when);
-    if (slideTo !== null) oscillator.frequency.exponentialRampToValueAtTime(slideTo, when + duration * .75);
-    volume.gain.setValueAtTime(.0001, when);
-    volume.gain.exponentialRampToValueAtTime(gain, when + .025);
-    volume.gain.exponentialRampToValueAtTime(.0001, when + Math.max(.04, duration - .025));
-    oscillator.connect(volume); volume.connect(audio.master);
-    oscillator.start(when); oscillator.stop(when + duration);
-  }
-
-  function playBoostSound(ctx) {
-    const now = ctx.currentTime;
-    const whoosh = ctx.createBufferSource();
-    const whooshFilter = ctx.createBiquadFilter();
-    const whooshGain = ctx.createGain();
-    whoosh.buffer = getNoiseBuffer(ctx);
-    whooshFilter.type = 'bandpass'; whooshFilter.Q.value = .65;
-    whooshFilter.frequency.setValueAtTime(420, now);
-    whooshFilter.frequency.exponentialRampToValueAtTime(2600, now + .42);
-    whooshGain.gain.setValueAtTime(.0001, now);
-    whooshGain.gain.exponentialRampToValueAtTime(.22, now + .07);
-    whooshGain.gain.exponentialRampToValueAtTime(.0001, now + .82);
-    whoosh.connect(whooshFilter); whooshFilter.connect(whooshGain); whooshGain.connect(audio.master);
-    whoosh.start(now); whoosh.stop(now + .84);
-
-    playTone(ctx, 84, now, .42, 'sawtooth', .18, 210);
-    [392, 523.25, 659.25, 783.99, 1046.5].forEach((note, index) => {
-      playTone(ctx, note, now + .08 + index * .09, .28, index === 4 ? 'sine' : 'triangle', index === 4 ? .16 : .11);
-    });
-    playTone(ctx, 1568, now + .47, .34, 'sine', .08);
-  }
-
-  function playWrongSound(ctx) {
-    const now = ctx.currentTime;
-    playTone(ctx, 210, now, .42, 'square', .11, 78);
-    playTone(ctx, 116, now + .08, .5, 'sawtooth', .08, 62);
-    const thud = ctx.createBufferSource();
-    const thudFilter = ctx.createBiquadFilter();
-    const thudGain = ctx.createGain();
-    thud.buffer = getNoiseBuffer(ctx);
-    thudFilter.type = 'lowpass'; thudFilter.frequency.value = 170;
-    thudGain.gain.setValueAtTime(.13, now);
-    thudGain.gain.exponentialRampToValueAtTime(.0001, now + .34);
-    thud.connect(thudFilter); thudFilter.connect(thudGain); thudGain.connect(audio.master);
-    thud.start(now); thud.stop(now + .36);
-  }
-
-  function playFeedbackSound(correct) {
-    if (!state.sound) return;
-    const ctx = startEngineSound();
-    if (!ctx) return;
-    try {
-      if (correct) playBoostSound(ctx);
-      else playWrongSound(ctx);
-    } catch (_) { /* 音が出ない環境でもゲームは続けられます */ }
-  }
-
   function speakEnglish() {
     const text = state.question && state.question.speech;
     if (!text || !('speechSynthesis' in window)) return;
@@ -726,23 +608,29 @@
       state.subject = tab.dataset.subject;
       state.topic = 'mix';
       updateTopics();
-      resetGame();
+      prepareGame();
     });
   }
-  el.topic.addEventListener('change', () => {state.topic = el.topic.value; resetGame();});
-  el.stage.addEventListener('change', () => {state.stage = Number(el.stage.value); resetGame();});
-  el.grade.addEventListener('change', () => {state.grade = Number(el.grade.value); resetGame();});
+  el.topic.addEventListener('change', () => {state.topic = el.topic.value; prepareGame();});
+  el.stage.addEventListener('change', () => {state.stage = Number(el.stage.value); prepareGame();});
+  el.grade.addEventListener('change', () => {state.grade = Number(el.grade.value); prepareGame();});
   el.settingsToggle.addEventListener('click', () => {
     const expanded = el.settingsToggle.getAttribute('aria-expanded') === 'true';
     el.settingsToggle.setAttribute('aria-expanded', String(!expanded));
   });
   el.next.addEventListener('click',advance);
-  el.restart.addEventListener('click',resetGame);
-  el.playAgain.addEventListener('click',resetGame);
+  el.start.addEventListener('click',startGame);
+  for (const button of [el.restart, el.playAgain]) {
+    button.addEventListener('click', () => {
+      prepareGame();
+      el.start.focus();
+    });
+  }
   el.speak.addEventListener('click',speakEnglish);
   el.sound.addEventListener('click',()=>{
     state.sound = !state.sound;
-    setSoundEnabled(state.sound);
+    audio.setEnabled(state.sound);
+    if (state.sound && session === 'running') audio.unlock();
     el.sound.setAttribute('aria-pressed', String(state.sound));
     el.sound.innerHTML = state.sound ? '🔊 <span>おと ON</span>' : '🔇 <span>おと OFF</span>';
     saveLocal('manabi-drive-sound', state.sound);
@@ -750,10 +638,7 @@
   document.addEventListener('keydown', (event) => {
     if (event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
     if (['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)) return;
-    if (!el.finish.hidden) {
-      if (event.key === 'Enter') { event.preventDefault(); resetGame(); }
-      return;
-    }
+    if (session !== 'running') return;
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
       event.preventDefault();
       choose(event.key === 'ArrowLeft' ? 0 : Math.min(el.choices.length - 1, el.choices.length > 2 ? el.choices.length - 1 : 1));
@@ -796,6 +681,7 @@
   if (VEHICLES.some(vehicle => vehicle.id === savedVehicle && unlockedVehicles.has(vehicle.id))) state.vehicleId = savedVehicle;
   renderVehicleChoices();
   state.sound = readLocal('manabi-drive-sound', true);
+  audio.setEnabled(state.sound);
   el.sound.setAttribute('aria-pressed', String(state.sound));
   el.sound.innerHTML = state.sound ? '🔊 <span>おと ON</span>' : '🔇 <span>おと OFF</span>';
   initDriveRenderer();
@@ -811,8 +697,7 @@
   }
   document.addEventListener('visibilitychange', onGameVisibilityChanged);
   updateTopics();
-  updateStage();
-  resetGame();
+  prepareGame();
 
   // HTTPS（GitHub Pages 等）または localhost でのみPWAのオフライン機能が動きます。
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {

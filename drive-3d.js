@@ -47,6 +47,9 @@
       this.travelSpeed = 0;
       this.boost = 0;
       this.debugTopDown = false;
+      this.stageScenery = null;
+      this.stageMaterials = [];
+      this.stageDeckMaterial = null;
       this.vehicle = {...DEFAULT_VEHICLE};
       this.materials = {
         road: new THREE.MeshStandardMaterial({color: 0x465155, map: makeAsphaltTexture(), roughness: .98, side: THREE.DoubleSide}),
@@ -81,6 +84,7 @@
       );
       grass.rotation.x = -Math.PI / 2;
       grass.position.y = -.04;
+      this.ground = grass;
       this.scene.add(grass);
 
       // Fixed scenery remains in world space while the camera moves through it.
@@ -107,11 +111,13 @@
       this.scenery.add(this.treeTrunks, this.treeLeaves);
       const hillMat = new THREE.MeshStandardMaterial({color: 0x76b884, roughness: 1});
       this.hillMaterial = hillMat;
+      this.hills = [];
       for (let i = 0; i < 7; i++) {
         const hill = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 10), hillMat);
         hill.scale.set(26 + i % 3 * 8, 8 + i % 2 * 5, 20);
         hill.position.set((i - 3) * 45, -2, 190 + i % 2 * 15);
         this.scene.add(hill);
+        this.hills.push(hill);
       }
     }
 
@@ -122,12 +128,146 @@
         3: {sky:0x16254d, fog:0x2b3b63, grass:0x294957, hill:0x3d526a, edge:0xd8bb6b}
       };
       const palette = palettes[stage] || palettes[1];
-      this.stage = Number(stage) || 1;
+      const nextStage = Number(stage) || 1;
+      const needsScenery = this.stage !== nextStage || !this.stageScenery;
+      this.stage = nextStage;
       this.scene.background.setHex(palette.sky);
       this.scene.fog.color.setHex(palette.fog);
       this.grassMaterial?.color.setHex(palette.grass);
       this.hillMaterial?.color.setHex(palette.hill);
       this.materials.edge.color.setHex(palette.edge);
+      this.ground.position.y = this.stage === 3 ? -22 : -.04;
+      this.treeTrunks.visible = this.stage !== 3;
+      this.treeLeaves.visible = this.stage !== 3;
+      for (const hill of this.hills) hill.visible = this.stage !== 2 && this.stage !== 3;
+      if (needsScenery) this.createStageScenery();
+    }
+
+    clearStageScenery() {
+      if (this.stageScenery) {
+        this.scene.remove(this.stageScenery);
+        this.stageScenery.traverse(object => { if (object.geometry) object.geometry.dispose(); });
+      }
+      for (const material of this.stageMaterials) material.dispose();
+      this.stageScenery = null;
+      this.stageMaterials = [];
+      this.stageDeckMaterial = null;
+    }
+
+    createStageScenery() {
+      this.clearStageScenery();
+      const group = new THREE.Group();
+      group.name = `stage-${this.stage}-scenery`;
+      this.stageScenery = group;
+      this.scene.add(group);
+      const material = (color, options = {}) => {
+        const value = new THREE.MeshStandardMaterial({color, roughness:.82, ...options});
+        this.stageMaterials.push(value);
+        return value;
+      };
+      const basic = (color) => {
+        const value = new THREE.MeshBasicMaterial({color});
+        this.stageMaterials.push(value);
+        return value;
+      };
+      const addBox = (width, height, depth, x, y, z, mat) => {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), mat);
+        mesh.position.set(x, y, z);
+        group.add(mesh);
+        return mesh;
+      };
+      const addCylinder = (radius, height, x, y, z, mat, radialSegments = 8) => {
+        const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, radialSegments), mat);
+        mesh.position.set(x, y, z);
+        group.add(mesh);
+        return mesh;
+      };
+      const addMountain = (x, y, z, width, height, mat) => {
+        const mountain = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 7), mat);
+        mountain.scale.set(width, height, width * .7);
+        mountain.position.set(x, y, z);
+        group.add(mountain);
+      };
+
+      if (this.stage === 1) {
+        const mountain = material(0x5d8e9a);
+        const snow = material(0xd9edf0);
+        addMountain(-105, 18, 205, 42, 38, mountain);
+        addMountain(-35, 13, 220, 34, 28, mountain);
+        addMountain(42, 17, 214, 39, 36, mountain);
+        addMountain(108, 12, 228, 34, 27, mountain);
+        addMountain(-105, 35, 194, 11, 12, snow);
+        addMountain(42, 34, 202, 10, 12, snow);
+        return;
+      }
+
+      if (this.stage === 2) {
+        const buildingMats = [material(0xc9b5a9), material(0x9fb4c8), material(0xd4a26e), material(0x9a9bbd)];
+        const windows = basic(0xffe7a3);
+        const pole = material(0x37485a, {metalness:.35, roughness:.55});
+        const lamp = basic(0xfff0b0);
+        for (let i = 0; i < 18; i++) {
+          const side = i % 2 ? 1 : -1;
+          const depth = Math.floor(i / 2);
+          const z = -145 + depth * 28;
+          const x = side * (25 + (depth % 3) * 10);
+          const width = 8 + (depth % 2) * 5;
+          const height = 10 + (depth * 7) % 22;
+          const building = addBox(width, height, 9, x, height / 2, z, buildingMats[depth % buildingMats.length]);
+          building.rotation.y = (depth % 3 - 1) * .04;
+          for (let row = 0; row < Math.floor(height / 4); row++) {
+            for (let column = -1; column <= 1; column += 2) {
+              const wx = x + column * Math.min(2.2, width * .28);
+              addBox(1.25, .85, .06, wx, 2.3 + row * 3.2, z - 4.54, windows);
+            }
+          }
+        }
+        for (let i = 0; i < 8; i++) {
+          const z = -142 + i * 22;
+          for (const x of [-9.2, 9.2]) {
+            addCylinder(.11, 6.2, x, 3.1, z, pole, 7);
+            const arm = addBox(1.4, .12, .12, x + (x < 0 ? .55 : -.55), 6.05, z, pole);
+            arm.rotation.z = x < 0 ? -.08 : .08;
+            const glow = new THREE.Mesh(new THREE.SphereGeometry(.32, 10, 8), lamp);
+            glow.position.set(x + (x < 0 ? 1.1 : -1.1), 5.9, z);
+            group.add(glow);
+          }
+        }
+        const tower = material(0x6f8096);
+        addBox(5, 28, 5, -74, 14, 220, tower);
+        addBox(5, 36, 5, 78, 18, 230, tower);
+        return;
+      }
+
+      // Stage 3: a raised expressway with barriers, support columns and a lit skyline.
+      const concrete = material(0x67758b);
+      const concreteDark = material(0x3b485e);
+      this.stageDeckMaterial = concreteDark;
+      const rail = material(0x9aa8b8, {metalness:.3, roughness:.55});
+      const nightBuilding = material(0x263653);
+      const cityLight = basic(0xffd879);
+      const mountain = material(0x202d4b);
+      addBox(1.1, 2.5, 178, -6.55, 1.25, -72, rail);
+      addBox(1.1, 2.5, 178, 6.55, 1.25, -72, rail);
+      for (let z = -155; z <= 12; z += 14) {
+        addBox(.28, 2.8, .28, -6.55, 1.35, z, concrete);
+        addBox(.28, 2.8, .28, 6.55, 1.35, z, concrete);
+      }
+      for (let z = -142; z <= 24; z += 42) {
+        addCylinder(.62, 20, -5.8, -11, z, concreteDark, 10);
+        addCylinder(.62, 20, 5.8, -11, z, concreteDark, 10);
+        addBox(14, .7, 1.1, 0, -1.7, z, concrete);
+      }
+      for (let i = 0; i < 10; i++) {
+        const z = 160 + i * 8;
+        const x = (i % 2 ? 1 : -1) * (22 + (i % 3) * 8);
+        const height = 8 + (i % 4) * 4;
+        addBox(7, height, 8, x, height / 2 - 20, z, nightBuilding);
+        addBox(1.15, .75, .06, x - 1.8, 1 + (i % 3) * 2 - 20, z - 4.04, cityLight);
+        addBox(1.15, .75, .06, x + 1.8, 1 + (i % 3) * 2 - 20, z - 4.04, cityLight);
+      }
+      addMountain(-115, -1, 210, 48, 35, mountain);
+      addMountain(115, -1, 220, 55, 42, mountain);
     }
 
     applyVehiclePalette(vehicle) {
@@ -355,6 +495,14 @@
       shape.moveTo(outline[0].x, outline[0].z);
       for (let i = 1; i < outline.length; i++) shape.lineTo(outline[i].x, outline[i].z);
       shape.closePath();
+      if (this.stage === 3 && this.stageDeckMaterial) {
+        const deckGeometry = new THREE.ExtrudeGeometry(shape, {depth:.9, bevelEnabled:false, steps:1});
+        const deck = new THREE.Mesh(deckGeometry, this.stageDeckMaterial);
+        deck.rotation.x = Math.PI / 2;
+        deck.position.y = -.02;
+        deck.name = 'elevated-highway-deck';
+        group.add(deck);
+      }
       const mesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), this.materials.road);
       mesh.rotation.x = Math.PI / 2;
       mesh.name = 'continuous-road-surface';
@@ -429,8 +577,9 @@
       this.travelSpeed = 4;
       this.boost = 0;
       this.forward.set(0, 0, 1);
-      this.camera.position.set(0, 7.8, -70);
-      this.lookTarget.set(0, 1, -35);
+      const cameraHeight = this.stage === 3 ? 10.8 : 7.8;
+      this.camera.position.set(0, cameraHeight, -70);
+      this.lookTarget.set(0, this.stage === 3 ? 2 : 1, -35);
       this.camera.lookAt(this.lookTarget);
       this.render();
     }
@@ -513,10 +662,10 @@
         this.camera.up.set(0, 1, 0);
         const speedBob = Math.sin(time * 18) * Math.min(.06, this.travelSpeed * .0015);
         const desired = this.car.position.clone().addScaledVector(this.forward, -14);
-        desired.y = 7.8 + speedBob;
+        desired.y = (this.stage === 3 ? 10.8 : 7.8) + speedBob;
         this.camera.position.lerp(desired, damp(5, dt));
         const target = this.car.position.clone().addScaledVector(this.forward, 15);
-        target.y = 1.2;
+        target.y = this.stage === 3 ? 2 : 1.2;
         this.lookTarget.lerp(target, damp(4.5, dt));
         this.camera.lookAt(this.lookTarget);
       } else {

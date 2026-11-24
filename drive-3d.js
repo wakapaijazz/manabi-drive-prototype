@@ -50,6 +50,7 @@
       this.stageScenery = null;
       this.stageMaterials = [];
       this.stageDeckMaterial = null;
+      this.stageRoadZones = [];
       this.vehicle = {...DEFAULT_VEHICLE};
       this.materials = {
         road: new THREE.MeshStandardMaterial({color: 0x465155, map: makeAsphaltTexture(), roughness: .98, side: THREE.DoubleSide}),
@@ -152,6 +153,7 @@
       this.stageScenery = null;
       this.stageMaterials = [];
       this.stageDeckMaterial = null;
+      this.stageRoadZones = [];
     }
 
     createStageScenery() {
@@ -176,10 +178,16 @@
         group.add(mesh);
         return mesh;
       };
-      const addCylinder = (radius, height, x, y, z, mat, radialSegments = 8) => {
+      const addBoxTo = (parent, width, height, depth, x, y, z, mat) => {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), mat);
+        mesh.position.set(x, y, z);
+        parent.add(mesh);
+        return mesh;
+      };
+      const addCylinder = (radius, height, x, y, z, mat, radialSegments = 8, parent = group) => {
         const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, radialSegments), mat);
         mesh.position.set(x, y, z);
-        group.add(mesh);
+        parent.add(mesh);
         return mesh;
       };
       const addMountain = (x, y, z, width, height, mat) => {
@@ -187,6 +195,9 @@
         mountain.scale.set(width, height, width * .7);
         mountain.position.set(x, y, z);
         group.add(mountain);
+      };
+      const protectFromRoad = (object, x, z, radius) => {
+        this.stageRoadZones.push({object, x, z, radius});
       };
 
       if (this.stage === 1) {
@@ -213,24 +224,32 @@
           const x = side * (25 + (depth % 3) * 10);
           const width = 8 + (depth % 2) * 5;
           const height = 10 + (depth * 7) % 22;
-          const building = addBox(width, height, 9, x, height / 2, z, buildingMats[depth % buildingMats.length]);
-          building.rotation.y = (depth % 3 - 1) * .04;
+          const buildingGroup = new THREE.Group();
+          buildingGroup.position.set(x, 0, z);
+          buildingGroup.rotation.y = (depth % 3 - 1) * .04;
+          group.add(buildingGroup);
+          addBoxTo(buildingGroup, width, height, 9, 0, height / 2, 0, buildingMats[depth % buildingMats.length]);
           for (let row = 0; row < Math.floor(height / 4); row++) {
             for (let column = -1; column <= 1; column += 2) {
-              const wx = x + column * Math.min(2.2, width * .28);
-              addBox(1.25, .85, .06, wx, 2.3 + row * 3.2, z - 4.54, windows);
+              const wx = column * Math.min(2.2, width * .28);
+              addBoxTo(buildingGroup, 1.25, .85, .06, wx, 2.3 + row * 3.2, -4.54, windows);
             }
           }
+          protectFromRoad(buildingGroup, x, z, Math.max(width, 9) * .7);
         }
         for (let i = 0; i < 8; i++) {
           const z = -142 + i * 22;
           for (const x of [-9.2, 9.2]) {
-            addCylinder(.11, 6.2, x, 3.1, z, pole, 7);
-            const arm = addBox(1.4, .12, .12, x + (x < 0 ? .55 : -.55), 6.05, z, pole);
+            const fixture = new THREE.Group();
+            fixture.position.set(x, 0, z);
+            group.add(fixture);
+            addCylinder(.11, 6.2, 0, 3.1, 0, pole, 7, fixture);
+            const arm = addBoxTo(fixture, 1.4, .12, .12, x < 0 ? .55 : -.55, 6.05, 0, pole);
             arm.rotation.z = x < 0 ? -.08 : .08;
             const glow = new THREE.Mesh(new THREE.SphereGeometry(.32, 10, 8), lamp);
-            glow.position.set(x + (x < 0 ? 1.1 : -1.1), 5.9, z);
-            group.add(glow);
+            glow.position.set(x < 0 ? 1.1 : -1.1, 5.9, 0);
+            fixture.add(glow);
+            protectFromRoad(fixture, x, z, 1.8);
           }
         }
         const tower = material(0x6f8096);
@@ -247,9 +266,9 @@
       const nightBuilding = material(0x263653);
       const cityLight = basic(0xffd879);
       const mountain = material(0x202d4b);
-      addBox(1.1, 2.5, 178, -6.55, 1.25, -72, rail);
-      addBox(1.1, 2.5, 178, 6.55, 1.25, -72, rail);
-      for (let z = -155; z <= 12; z += 14) {
+      addBox(1.1, 2.5, 120, -6.55, 1.25, -82.5, rail);
+      addBox(1.1, 2.5, 120, 6.55, 1.25, -82.5, rail);
+      for (let z = -140; z <= -24; z += 14) {
         addBox(.28, 2.8, .28, -6.55, 1.35, z, concrete);
         addBox(.28, 2.8, .28, 6.55, 1.35, z, concrete);
       }
@@ -268,6 +287,20 @@
       }
       addMountain(-115, -1, 210, 48, 35, mountain);
       addMountain(115, -1, 220, 55, 42, mountain);
+    }
+
+    refreshStageSceneryForRoad(outline) {
+      for (const zone of this.stageRoadZones) {
+        let blocked = G.containsPoint(outline, {x:zone.x, z:zone.z});
+        for (let i = 0; !blocked && i < 8; i++) {
+          const angle = i * Math.PI / 4;
+          blocked = G.containsPoint(outline, {
+            x: zone.x + Math.cos(angle) * zone.radius,
+            z: zone.z + Math.sin(angle) * zone.radius
+          });
+        }
+        zone.object.visible = !blocked;
+      }
     }
 
     applyVehiclePalette(vehicle) {
@@ -489,6 +522,7 @@
         this.roadGroup.traverse(object => { if (object.geometry) object.geometry.dispose(); });
       }
       this.road = G.createRoad(count);
+      this.refreshStageSceneryForRoad(this.road.outline);
       const group = new THREE.Group();
       const outline = this.road.outline;
       const shape = new THREE.Shape();

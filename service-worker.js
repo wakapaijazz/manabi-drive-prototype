@@ -1,7 +1,7 @@
-const CACHE = 'manabi-drive-v16-scenery-highway';
+const CACHE = 'manabi-drive-v17-road-clearance';
 const RESOURCES = [
-  './', './index.html', './style.css?v=stages3', './questions.js?v=stages3', './app.js?v=stages3',
-  './vendor/three.min.js', './road-geometry.js?v=stages3', './drive-3d.js?v=stages3',
+  './', './index.html', './style.css?v=stages4', './questions.js?v=stages4', './app.js?v=stages4',
+  './vendor/three.min.js', './road-geometry.js?v=stages4', './drive-3d.js?v=stages4',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'
 ];
 self.addEventListener('install', (event) => {
